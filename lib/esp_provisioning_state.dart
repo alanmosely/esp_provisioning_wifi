@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 
+/// A list of all the possible states that the ESP provisioning can be in
 enum EspProvisioningStatus {
   initial,
   bleScanned,
@@ -10,6 +11,8 @@ enum EspProvisioningStatus {
   error,
 }
 
+/// EspProvisioningState is a class that contains a bunch of properties that are used to store the state
+/// of the ESP provisioning
 class EspProvisioningState extends Equatable {
   const EspProvisioningState({
     this.status = EspProvisioningStatus.initial,

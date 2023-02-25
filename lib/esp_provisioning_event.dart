@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 
+/// An abstract class that represents events across the provisioning process
 abstract class EspProvisioningEvent extends Equatable {
   const EspProvisioningEvent();
 
@@ -7,6 +8,7 @@ abstract class EspProvisioningEvent extends Equatable {
   List<Object> get props => [];
 }
 
+/// A class that represents the start of the provisioning process
 class EspProvisioningEventStart extends EspProvisioningEvent {
   final String bluetoothDevicePrefix;
 
@@ -16,6 +18,7 @@ class EspProvisioningEventStart extends EspProvisioningEvent {
   List<Object> get props => [bluetoothDevicePrefix];
 }
 
+/// A class that represents the selection of a ble device within the provisioning process
 class EspProvisioningEventBleSelected extends EspProvisioningEvent {
   final String bluetoothDevice;
   final String proofOfPossession;
@@ -27,6 +30,7 @@ class EspProvisioningEventBleSelected extends EspProvisioningEvent {
   List<Object> get props => [bluetoothDevice, proofOfPossession];
 }
 
+/// A class that represents the selection of a wifi network within the provisioning process
 class EspProvisioningEventWifiSelected extends EspProvisioningEvent {
   final String bluetoothDevice;
   final String proofOfPossession;
