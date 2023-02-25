@@ -18,15 +18,15 @@ class EspProvisioningBloc
     on<EspProvisioningEventWifiSelected>(_onWifiSelected);
   }
 
-/// A late final variable that is assigned to the instance of the EspProvisioningService class.
+  /// A late final variable that is assigned to the instance of the EspProvisioningService class.
   late final FlutterEspBleProv? espProvisioningService =
       EspProvisioningService.getInstance();
 
-/// _onStart() is a function that is called when the EspProvisioningEventStart event is emitted
-/// 
-/// Args:
-///   event (EspProvisioningEventStart): This is the event that was emitted by the UI
-///   emit (Emitter<EspProvisioningState>): This is the function that you use to emit a new state
+  /// _onStart() is a function that is called when the EspProvisioningEventStart event is emitted
+  ///
+  /// Args:
+  ///   event (EspProvisioningEventStart): This is the event that was emitted by the UI
+  ///   emit (Emitter<EspProvisioningState>): This is the function that you use to emit a new state
   Future<void> _onStart(
     EspProvisioningEventStart event,
     Emitter<EspProvisioningState> emit,
@@ -55,7 +55,7 @@ class EspProvisioningBloc
 
   /// _onBleSelected() is a function that is called when the user selects a bluetooth device from the
   /// list of available bluetooth devices
-  /// 
+  ///
   /// Args:
   ///   event (EspProvisioningEventBleSelected): This is the event that was emitted by the UI
   ///   emit (Emitter<EspProvisioningState>): This is the function that you use to emit a new state
@@ -97,7 +97,7 @@ class EspProvisioningBloc
 
   /// _onWifiSelected() is called when the user selects a wifi network from the list of available
   /// networks. It then calls the provisionWifi() function in the EspProvisioningService class
-  /// 
+  ///
   /// Args:
   ///   event (EspProvisioningEventWifiSelected): This is the event that was emitted by the UI
   ///   emit (Emitter<EspProvisioningState>): This is the function that you use to emit a new state

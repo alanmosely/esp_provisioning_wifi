@@ -48,7 +48,8 @@ void main() {
       act: (bloc) => bloc.add(const EspProvisioningEventWifiSelected(
           "device", "pop", "ssid", "password")),
       expect: () => [
-        const EspProvisioningState(status: EspProvisioningStatus.networkChosen, wifiNetwork: "ssid")
+        const EspProvisioningState(
+            status: EspProvisioningStatus.networkChosen, wifiNetwork: "ssid")
       ],
     );
   });
