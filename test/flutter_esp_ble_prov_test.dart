@@ -1,6 +1,6 @@
-import 'package:flutter_esp_ble_prov/flutter_esp_ble_prov.dart';
-import 'package:flutter_esp_ble_prov/src/flutter_esp_ble_prov_method_channel.dart';
-import 'package:flutter_esp_ble_prov/src/flutter_esp_ble_prov_platform_interface.dart';
+import 'package:esp_provisioning_wifi/src/flutter_esp_ble_prov/flutter_esp_ble_prov.dart';
+import 'package:esp_provisioning_wifi/src/flutter_esp_ble_prov/flutter_esp_ble_prov_method_channel.dart';
+import 'package:esp_provisioning_wifi/src/flutter_esp_ble_prov/flutter_esp_ble_prov_platform_interface.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 

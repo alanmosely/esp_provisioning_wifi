@@ -1,4 +1,4 @@
-import 'src/flutter_esp_ble_prov_platform_interface.dart';
+import 'flutter_esp_ble_prov_platform_interface.dart';
 
 /// Plugin provides core functionality to provision ESP32 devices over BLE
 class FlutterEspBleProv {

@@ -1,22 +1,25 @@
-name: flutter_esp_ble_prov
+name: esp_provisioning_wifi
 description: |
-  Provision WiFi on Espressif ESP32 devices over BLE. This library
-  uses Espressif-provided provisioning libraries for their custom
-  protocol over BLE.
-version: 0.1.5
-repository: https://gitlab.com/afshar-oss/flutter_esp_ble_prov
-issue_tracker: https://gitlab.com/afshar-oss/flutter_esp_ble_prov/-/issues
+  Bloc wrapper over 'flutter_esp_ble_prov' which provisions WiFi on 
+  Espressif ESP32 devices over Bluetooth. It uses the 'esp-idf-provisioning-android'
+  and 'esp-idf-provisioning-ios' Espressif-provided provisioning libraries.
+version: 0.0.1
+repository: https://github.com/alanmosely/esp_provisioning_wifi
+issue_tracker: https://github.com/alanmosely/esp_provisioning_wifi/issues
 
 environment:
-  sdk: '>=2.18.6 <3.0.0'
+  sdk: ">=2.19.2 <3.0.0"
   flutter: ">=2.5.0"
 
 dependencies:
   flutter:
     sdk: flutter
+  flutter_bloc: ^8.1.2
+  equatable: ^2.0.5
   plugin_platform_interface: ^2.0.2
 
 dev_dependencies:
+  bloc_test: ^9.1.1
   flutter_test:
     sdk: flutter
   flutter_lints: ^2.0.0
