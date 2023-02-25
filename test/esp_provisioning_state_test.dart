@@ -4,11 +4,14 @@ import 'package:bloc_test/bloc_test.dart';
 import 'package:esp_provisioning_wifi/esp_provisioning_bloc.dart';
 import 'package:esp_provisioning_wifi/esp_provisioning_event.dart';
 import 'package:esp_provisioning_wifi/esp_provisioning_state.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('EspProvisioningBloc', () {
     late EspProvisioningBloc espProvisioningBloc;
+
+    WidgetsFlutterBinding.ensureInitialized();
 
     setUp(() {
       espProvisioningBloc = EspProvisioningBloc();
@@ -24,6 +27,7 @@ void main() {
             wifiNetworks: <String>[],
             wifiNetwork: "",
             wifiProvisioned: false,
+            errorMsg: "",
           ));
     });
 
@@ -33,8 +37,9 @@ void main() {
       act: (bloc) =>
           bloc.add(const EspProvisioningEventBleSelected("device", "prefix")),
       expect: () => [
-        const EspProvisioningState(status: EspProvisioningStatus.deviceChosen),
-        const EspProvisioningState(status: EspProvisioningStatus.error),
+        const EspProvisioningState(
+            status: EspProvisioningStatus.deviceChosen,
+            bluetoothDevice: "device")
       ],
     );
     blocTest(
@@ -43,8 +48,7 @@ void main() {
       act: (bloc) => bloc.add(const EspProvisioningEventWifiSelected(
           "device", "pop", "ssid", "password")),
       expect: () => [
-        const EspProvisioningState(status: EspProvisioningStatus.networkChosen),
-        const EspProvisioningState(status: EspProvisioningStatus.error),
+        const EspProvisioningState(status: EspProvisioningStatus.networkChosen, wifiNetwork: "ssid")
       ],
     );
   });
