@@ -1,5 +1,5 @@
-name: flutter_esp_ble_prov_example
-description: Demonstrates how to use the flutter_esp_ble_prov plugin.
+name: esp_provisioning_wifi_example
+description: Demonstrates how to use the esp_provisioning_wifi library.
 
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.

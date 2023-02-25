@@ -1,6 +1,6 @@
-# flutter_esp_ble_prov_example
+# esp_provisioning_wifi_example
 
-Demonstrates how to use the flutter_esp_ble_prov plugin.
+Demonstrates how to use the esp_provisioning_wifi plugin.
 
 ## Getting Started
 
