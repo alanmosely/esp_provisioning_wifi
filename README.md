@@ -10,7 +10,7 @@ Library to provision WiFi on ESP32 devices over Bluetooth, using Bloc.
 
 ## Requirements
 
-## Android 6 (API level 23)+
+### Android 6 (API level 23)+
 
 Make sure your `android/build.gradle` has 23+ here:
 
@@ -33,7 +33,7 @@ allprojects {
 
 Bluetooth permissions are automatically requested by the library.
 
-## iOS 13.0+
+### iOS 13.0+
 
 
 Add this in your `ios/Runner/Info.plist`:
@@ -42,18 +42,18 @@ Add this in your `ios/Runner/Info.plist`:
 <string>Our app uses bluetooth to find, connect and transfer data between different devices</string>
 ```
 
-# Notes
+## Notes
 
-## flutter_esp_ble_prov
+### flutter_esp_ble_prov
 
 This library is a [Bloc](https://pub.dev/packages/flutter_bloc) wrapper over [flutter_esp_ble_prov](https://pub.dev/packages/flutter_esp_ble_prov).
 
-## esp-idf-provisioning-android
+### esp-idf-provisioning-android
 
 The [Espressif Android Provisioning library](https://github.com/espressif/esp-idf-provisioning-android) is currently embedded in libs.
 
-[logo]: https://raw.githubusercontent.com/alanmosely/esp_provisioning_wifi/logo.png
-[pub_badge]: https://img.shields.io/pub/v/dart_frog_web_socket.svg
-[pub_link]: https://pub.dartlang.org/packages/dart_frog_web_socket
+[logo]: https://raw.githubusercontent.com/alanmosely/esp_provisioning_wifi/master/logo.png
+[pub_badge]: https://img.shields.io/pub/v/esp_provisioning_wifi.svg
+[pub_link]: https://pub.dartlang.org/packages/esp_provisioning_wifi
 [license_badge]: https://img.shields.io/badge/license-MIT-blue.svg
 [license_link]: https://opensource.org/licenses/MIT
