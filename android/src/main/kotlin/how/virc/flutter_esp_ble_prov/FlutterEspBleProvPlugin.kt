@@ -322,7 +322,7 @@ class WifiProvisionManager(boss: Boss) : ActionManager(boss) {
 
         override fun wifiConfigApplied() {
           boss.d("wifiConfigApplied")
-          ctx.result.success(true)
+          // ctx.result.success(true)
         }
 
         override fun wifiConfigApplyFailed(e: java.lang.Exception?) {

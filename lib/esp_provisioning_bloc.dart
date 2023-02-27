@@ -19,8 +19,8 @@ class EspProvisioningBloc
   }
 
   /// A late final variable that is assigned to the instance of the EspProvisioningService class.
-  late final FlutterEspBleProv? espProvisioningService =
-      EspProvisioningService.getInstance();
+  late final FlutterEspBleProv espProvisioningService =
+      EspProvisioningService();
 
   /// _onStart() is a function that is called when the EspProvisioningEventStart event is emitted
   ///
@@ -31,21 +31,28 @@ class EspProvisioningBloc
     EspProvisioningEventStart event,
     Emitter<EspProvisioningState> emit,
   ) async {
+    bool timedOut = false;
     try {
       emit(
         state.copyWith(
           status: EspProvisioningStatus.initial,
+          bluetoothDevice: "",
           bluetoothDevices: List.empty(),
+          timedOut: timedOut,
         ),
       );
-      final scannedDevices = await espProvisioningService!
+      final scannedDevices = await espProvisioningService
           .scanBleDevices(event.bluetoothDevicePrefix)
-          .timeout(const Duration(seconds: TIMEOUT),
-              onTimeout: () => throw Exception("Timed out"));
+          .timeout(const Duration(seconds: TIMEOUT), onTimeout: () {
+        timedOut = true;
+        return List.empty();
+      });
       emit(
         state.copyWith(
-            status: EspProvisioningStatus.bleScanned,
-            bluetoothDevices: scannedDevices),
+          status: EspProvisioningStatus.bleScanned,
+          bluetoothDevices: scannedDevices,
+          timedOut: timedOut,
+        ),
       );
     } catch (e) {
       emit(state.copyWith(
@@ -63,12 +70,14 @@ class EspProvisioningBloc
     EspProvisioningEventBleSelected event,
     Emitter<EspProvisioningState> emit,
   ) async {
+    bool timedOut = false;
     try {
       if (event.bluetoothDevice == '') {
         return emit(
           state.copyWith(
             status: EspProvisioningStatus.initial,
             bluetoothDevices: List.empty(),
+            timedOut: timedOut,
           ),
         );
       }
@@ -76,18 +85,23 @@ class EspProvisioningBloc
         state.copyWith(
           status: EspProvisioningStatus.deviceChosen,
           bluetoothDevice: event.bluetoothDevice,
+          timedOut: timedOut,
         ),
       );
       var scannedNetworks = <String>[];
-      scannedNetworks = await espProvisioningService!
+      scannedNetworks = await espProvisioningService
           .scanWifiNetworks(event.bluetoothDevice, event.proofOfPossession)
-          .timeout(const Duration(seconds: TIMEOUT),
-              onTimeout: () => throw Exception("Timed out"));
+          .timeout(const Duration(seconds: TIMEOUT), onTimeout: () {
+        timedOut = true;
+        return List.empty();
+      });
       emit(
         state.copyWith(
-            status: EspProvisioningStatus.wifiScanned,
-            bluetoothDevice: event.bluetoothDevice,
-            wifiNetworks: scannedNetworks),
+          status: EspProvisioningStatus.wifiScanned,
+          bluetoothDevice: event.bluetoothDevice,
+          wifiNetworks: scannedNetworks,
+          timedOut: timedOut,
+        ),
       );
     } catch (e) {
       emit(state.copyWith(
@@ -105,20 +119,27 @@ class EspProvisioningBloc
     EspProvisioningEventWifiSelected event,
     Emitter<EspProvisioningState> emit,
   ) async {
+    bool wifiProvisioned = false;
+    bool timedOut = false;
     try {
       emit(
         state.copyWith(
           status: EspProvisioningStatus.networkChosen,
           wifiNetwork: event.wifiNetwork,
+          timedOut: timedOut,
         ),
       );
-      final bool? wifiProvisioned = await espProvisioningService!
+      wifiProvisioned = (await espProvisioningService
           .provisionWifi(event.bluetoothDevice, event.proofOfPossession,
               event.wifiNetwork, event.password)
-          .timeout(const Duration(seconds: TIMEOUT), onTimeout: () => false);
+          .timeout(const Duration(seconds: TIMEOUT), onTimeout: () {
+        timedOut = true;
+        return false;
+      }))!;
       emit(state.copyWith(
         status: EspProvisioningStatus.wifiProvisioned,
         wifiProvisioned: wifiProvisioned,
+        timedOut: timedOut,
       ));
     } catch (e) {
       emit(state.copyWith(

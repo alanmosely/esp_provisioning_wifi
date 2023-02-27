@@ -21,6 +21,7 @@ class EspProvisioningState extends Equatable {
     this.wifiNetworks = const <String>[],
     this.wifiNetwork = "",
     this.wifiProvisioned = false,
+    this.timedOut = false,
     this.errorMsg = "",
   });
 
@@ -30,6 +31,7 @@ class EspProvisioningState extends Equatable {
   final List<String> wifiNetworks;
   final String wifiNetwork;
   final bool wifiProvisioned;
+  final bool timedOut;
   final String errorMsg;
 
   EspProvisioningState copyWith({
@@ -39,6 +41,7 @@ class EspProvisioningState extends Equatable {
     List<String>? wifiNetworks,
     String? wifiNetwork,
     bool? wifiProvisioned,
+    bool? timedOut,
     String? errorMsg,
   }) {
     return EspProvisioningState(
@@ -48,13 +51,14 @@ class EspProvisioningState extends Equatable {
       wifiNetworks: wifiNetworks ?? this.wifiNetworks,
       wifiNetwork: wifiNetwork ?? this.wifiNetwork,
       wifiProvisioned: wifiProvisioned ?? this.wifiProvisioned,
+      timedOut: timedOut ?? this.timedOut,
       errorMsg: errorMsg ?? this.errorMsg,
     );
   }
 
   @override
   String toString() {
-    return '''EspProvisioningState { status: $status, bluetoothDevices: ${bluetoothDevices.length}, bluetoothDevice: $bluetoothDevice, wifiNetworks: ${wifiNetworks.length}, wifiNetwork: $wifiNetwork, wifiProvisioned: $wifiProvisioned, errorMsg: $errorMsg''';
+    return '''EspProvisioningState { status: $status, bluetoothDevices: ${bluetoothDevices.length}, bluetoothDevice: $bluetoothDevice, wifiNetworks: ${wifiNetworks.length}, wifiNetwork: $wifiNetwork, wifiProvisioned: $wifiProvisioned, timedOut: $timedOut, errorMsg: $errorMsg''';
   }
 
   @override
@@ -65,6 +69,7 @@ class EspProvisioningState extends Equatable {
         wifiNetworks,
         wifiNetwork,
         wifiProvisioned,
+        timedOut,
         errorMsg
       ];
 }
