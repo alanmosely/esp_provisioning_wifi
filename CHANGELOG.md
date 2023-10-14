@@ -9,3 +9,7 @@
 ## 0.0.3
 
 * Alpha: Improvements to pub.dev score (again)
+
+## 0.0.4
+
+* Alpha: Correctly report on provisioning success
