@@ -87,14 +87,14 @@ private class BLEProvisionService: ProvisionService {
             device in
             device?.provision(ssid: ssid, passPhrase: passphrase) { status in
                 switch status {
-                case .success, .configApplied:
+                case .success:
                     NSLog("Success provisioning device. ssid: \(ssid), deviceName: \(deviceName) ")
                     self.result(true)
+                case .configApplied:
+                    NSLog("Wifi config applied device. ssid: \(ssid), deviceName: \(deviceName) ")
                 case .failure:
                     NSLog("Failed to provision device. ssid: \(ssid), deviceName: \(deviceName) ")
                     self.result(false)
-                    
-                device?.disconnect()
                 }
             }
         }
