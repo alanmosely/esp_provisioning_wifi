@@ -55,5 +55,5 @@ dependencies {
     implementation 'com.google.protobuf:protobuf-javalite:3.18.0'
     implementation 'com.github.espressif:esp-idf-provisioning-android:lib-2.1.2'
 
-    compileOnly 'io.flutter:flutter_embedding_debug:1.0.0-b24591ed328a2d4ce6505819e2f5898a78132f7f'
+    compileOnly 'io.flutter:flutter_embedding_debug:1.0.0-a794cf2681c6c9fe7b260e0e84de96298dc9c18b'
 }
