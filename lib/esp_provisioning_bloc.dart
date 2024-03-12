@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:esp_provisioning_wifi/src/flutter_esp_ble_prov/flutter_esp_ble_prov.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import 'esp_provisioning_constants.dart';
 import 'esp_provisioning_event.dart';
@@ -22,6 +24,9 @@ class EspProvisioningBloc
   late final FlutterEspBleProv espProvisioningService =
       EspProvisioningService();
 
+  /// A boolean variable that is used to check if bluetooth permission has been granted
+  bool bluetoothIsGranted = false;
+
   /// _onStart() is a function that is called when the EspProvisioningEventStart event is emitted
   ///
   /// Args:
@@ -31,32 +36,31 @@ class EspProvisioningBloc
     EspProvisioningEventStart event,
     Emitter<EspProvisioningState> emit,
   ) async {
-    bool timedOut = false;
     try {
-      emit(
-        state.copyWith(
-          status: EspProvisioningStatus.initial,
-          bluetoothDevice: "",
-          bluetoothDevices: List.empty(),
-          timedOut: timedOut,
-        ),
-      );
-      final scannedDevices = await espProvisioningService
-          .scanBleDevices(event.bluetoothDevicePrefix)
-          .timeout(const Duration(seconds: TIMEOUT), onTimeout: () {
-        timedOut = true;
-        return List.empty();
-      });
-      emit(
-        state.copyWith(
+      await requestBluetoothPermission();
+      if (bluetoothIsGranted) {
+        emit(state.copyWith(status: EspProvisioningStatus.initial));
+
+        final scannedDevices = await espProvisioningService
+            .scanBleDevices(event.bluetoothDevicePrefix)
+            .timeout(const Duration(seconds: TIMEOUT),
+                onTimeout: () => List.empty());
+
+        emit(state.copyWith(
           status: EspProvisioningStatus.bleScanned,
           bluetoothDevices: scannedDevices,
-          timedOut: timedOut,
-        ),
-      );
+        ));
+      } else {
+        emit(state.copyWith(
+          status: EspProvisioningStatus.error,
+          errorMsg: 'Bluetooth permission not granted',
+        ));
+      }
     } catch (e) {
       emit(state.copyWith(
-          status: EspProvisioningStatus.error, errorMsg: e.toString()));
+        status: EspProvisioningStatus.error,
+        errorMsg: e.toString(),
+      ));
     }
   }
 
@@ -144,6 +148,25 @@ class EspProvisioningBloc
     } catch (e) {
       emit(state.copyWith(
           status: EspProvisioningStatus.error, errorMsg: e.toString()));
+    }
+  }
+
+  /// requestBluetoothPermission() is a function that requests bluetooth permission from the user
+  /// using the permission_handler package
+  Future<void> requestBluetoothPermission() async {
+    if (Platform.isAndroid) {
+      Map<Permission, PermissionStatus> status = await [
+        Permission.bluetoothScan,
+        Permission.bluetoothConnect
+      ].request();
+      bluetoothIsGranted =
+          status[Permission.bluetoothScan] == PermissionStatus.granted &&
+              status[Permission.bluetoothConnect] == PermissionStatus.granted;
+    } else if (Platform.isIOS) {
+      Map<Permission, PermissionStatus> status =
+          await [Permission.bluetooth].request();
+      bluetoothIsGranted =
+          status[Permission.bluetooth] == PermissionStatus.granted;
     }
   }
 }
