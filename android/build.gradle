@@ -5,6 +5,7 @@ buildscript {
     ext.kotlin_version = '1.7.21'
     repositories {
         google()
+        maven { url ("https://jitpack.io/") }
         mavenCentral()
     }
 
@@ -18,9 +19,9 @@ allprojects {
     repositories {
         google()
         mavenCentral()
+        maven { url ("https://jitpack.io/") }
         maven { url("http://download.flutter.io/")
             allowInsecureProtocol = true}
-        maven { url ("https://jitpack.io/") }
     }
 }
 
