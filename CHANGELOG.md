@@ -17,3 +17,7 @@
 ## 0.0.5
 
 * Alpha: Add permission-handler and update to latest flutter_esp_ble_prov
+
+## 0.0.6
+
+* Alpha: Fix iOS compilation errors
