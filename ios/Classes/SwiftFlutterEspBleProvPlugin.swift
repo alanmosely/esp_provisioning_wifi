@@ -69,14 +69,20 @@ private class BLEProvisionService: ProvisionService {
     }
     
     func scanWifiNetworks(deviceName: String, proofOfPossession: String) {
-        self.connect(deviceName: deviceName, proofOfPossession: proofOfPossession) {
-            device in
+        self.connect(deviceName: deviceName, proofOfPossession: proofOfPossession) { device in
             device?.scanWifiList { wifiList, error in
-                if(error != nil) {
+                if let error = error {
                     NSLog("Error scanning wifi networks, deviceName: \(deviceName) ")
-                    ESPErrorHandler.handle(error: error!, result: self.result)
+                    ESPErrorHandler.handle(error: error, result: self.result)
+                    return
                 }
-                self.result(wifiList?.map({(networks: ESPWifiNetwork) -> String in return networks.ssid}))
+                let networks = wifiList?.map { wifiNetwork in
+                    return [
+                        "ssid": wifiNetwork.ssid,
+                        "rssi": wifiNetwork.rssi
+                    ]
+                }
+                self.result(networks)
                 device?.disconnect()
             }
         }

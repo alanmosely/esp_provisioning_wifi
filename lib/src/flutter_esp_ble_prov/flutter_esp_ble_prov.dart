@@ -15,7 +15,7 @@ class FlutterEspBleProv {
   /// This library uses SECURITY_1 by default which insists on a
   /// [proofOfPossession] string. ESP32 Arduino demo defaults this value to
   /// "abcd1234"
-  Future<List<String>> scanWifiNetworks(
+  Future<List<WiFiNetwork>> scanWifiNetworks(
       String deviceName, String proofOfPossession) {
     return FlutterEspBleProvPlatform.instance
         .scanWifiNetworks(deviceName, proofOfPossession);
@@ -33,4 +33,12 @@ class FlutterEspBleProv {
   Future<String?> getPlatformVersion() {
     return FlutterEspBleProvPlatform.instance.getPlatformVersion();
   }
+}
+
+/// Represents a WiFi network with a given [ssid] and [rssi] signal strength.
+class WiFiNetwork {
+  final String ssid;
+  final int rssi;
+
+  WiFiNetwork({required this.ssid, required this.rssi});
 }

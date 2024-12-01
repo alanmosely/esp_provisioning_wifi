@@ -166,14 +166,14 @@ class _MyAppViewState extends State<MyAppView> {
                       itemBuilder: (context, i) {
                         return ListTile(
                           title: Text(
-                            state.wifiNetworks[i],
+                            state.wifiNetworks[i].ssid,
                             style: TextStyle(
                               color: Colors.green.shade700,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
                           onTap: () async {
-                            final wifiNetwork = state.wifiNetworks[i];
+                            final wifiNetwork = state.wifiNetworks[i].ssid;
                             context.read<EspProvisioningBloc>().add(
                                 EspProvisioningEventWifiSelected(
                                     state.bluetoothDevice,

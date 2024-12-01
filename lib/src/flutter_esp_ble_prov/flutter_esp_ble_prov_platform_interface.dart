@@ -1,3 +1,4 @@
+import 'package:esp_provisioning_wifi/src/flutter_esp_ble_prov/flutter_esp_ble_prov.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 
 import 'flutter_esp_ble_prov_method_channel.dart';
@@ -31,7 +32,7 @@ abstract class FlutterEspBleProvPlatform extends PlatformInterface {
     throw UnimplementedError('scanBleDevices has not been implemented.');
   }
 
-  Future<List<String>> scanWifiNetworks(
+  Future<List<WiFiNetwork>> scanWifiNetworks(
       String deviceName, String proofOfPossession) {
     throw UnimplementedError('scanWifiNetworks has not been implemented.');
   }

@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import 'package:esp_provisioning_wifi/src/flutter_esp_ble_prov/flutter_esp_ble_prov.dart';
 
 /// A list of all the possible states that the ESP provisioning can be in
 enum EspProvisioningStatus {
@@ -18,7 +19,7 @@ class EspProvisioningState extends Equatable {
     this.status = EspProvisioningStatus.initial,
     this.bluetoothDevices = const <String>[],
     this.bluetoothDevice = "",
-    this.wifiNetworks = const <String>[],
+    this.wifiNetworks = const <WiFiNetwork>[],
     this.wifiNetwork = "",
     this.wifiProvisioned = false,
     this.timedOut = false,
@@ -28,7 +29,7 @@ class EspProvisioningState extends Equatable {
   final EspProvisioningStatus status;
   final List<String> bluetoothDevices;
   final String bluetoothDevice;
-  final List<String> wifiNetworks;
+  final List<WiFiNetwork> wifiNetworks;
   final String wifiNetwork;
   final bool wifiProvisioned;
   final bool timedOut;
@@ -38,7 +39,7 @@ class EspProvisioningState extends Equatable {
     EspProvisioningStatus? status,
     List<String>? bluetoothDevices,
     String? bluetoothDevice,
-    List<String>? wifiNetworks,
+    List<WiFiNetwork>? wifiNetworks,
     String? wifiNetwork,
     bool? wifiProvisioned,
     bool? timedOut,

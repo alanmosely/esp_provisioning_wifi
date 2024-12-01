@@ -266,6 +266,7 @@ class BleScanManager(boss: Boss) : ActionManager(boss) {
 }
 
 class WifiScanManager(boss: Boss) : ActionManager(boss) {
+  data class WiFiNetwork(val ssid: String, val rssi: Int)
   override fun call(ctx: CallContext) {
     val name = ctx.arg("deviceName") ?: return
     val proofOfPossession = ctx.arg("proofOfPossession") ?: return
@@ -275,14 +276,18 @@ class WifiScanManager(boss: Boss) : ActionManager(boss) {
       boss.d("scanNetworks: start")
       esp.scanNetworks(object : WiFiScanListener {
         override fun onWifiListReceived(wifiList: ArrayList<WiFiAccessPoint>?) {
-          wifiList ?: return
-          wifiList.forEach { boss.networks.add(it.wifiName) }
-          boss.d("scanNetworks: complete ${boss.networks}")
-          Handler(Looper.getMainLooper()).post {
-            ctx.result.success(ArrayList<String>(boss.networks))
-          }
-          boss.d("scanNetworks: complete 2 ${boss.networks}")
-          esp.disconnectDevice()
+            wifiList ?: return
+            val networks = wifiList.map { wifiAccessPoint ->
+                mapOf(
+                    "ssid" to wifiAccessPoint.wifiName,
+                    "rssi" to wifiAccessPoint.rssi
+                )
+            }
+            boss.d("scanNetworks: complete $networks")
+            Handler(Looper.getMainLooper()).post {
+                ctx.result.success(networks)
+            }
+            esp.disconnectDevice()
         }
 
         override fun onWiFiScanFailed(e: java.lang.Exception?) {

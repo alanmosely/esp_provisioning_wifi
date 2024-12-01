@@ -4,6 +4,7 @@ import 'package:bloc_test/bloc_test.dart';
 import 'package:esp_provisioning_wifi/esp_provisioning_bloc.dart';
 import 'package:esp_provisioning_wifi/esp_provisioning_event.dart';
 import 'package:esp_provisioning_wifi/esp_provisioning_state.dart';
+import 'package:esp_provisioning_wifi/src/flutter_esp_ble_prov/flutter_esp_ble_prov.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -24,7 +25,7 @@ void main() {
             status: EspProvisioningStatus.initial,
             bluetoothDevices: <String>[],
             bluetoothDevice: "",
-            wifiNetworks: <String>[],
+            wifiNetworks: <WiFiNetwork>[],
             wifiNetwork: "",
             wifiProvisioned: false,
             errorMsg: "",

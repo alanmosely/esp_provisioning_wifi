@@ -1,3 +1,4 @@
+import 'package:esp_provisioning_wifi/src/flutter_esp_ble_prov/flutter_esp_ble_prov.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
@@ -29,19 +30,20 @@ class MethodChannelFlutterEspBleProv extends FlutterEspBleProvPlatform {
   }
 
   @override
-  Future<List<String>> scanWifiNetworks(
+  Future<List<WiFiNetwork>> scanWifiNetworks(
       String deviceName, String proofOfPossession) async {
-    final args = {
+    final List<dynamic> result =
+        await methodChannel.invokeMethod('scanWifiNetworks', {
       'deviceName': deviceName,
       'proofOfPossession': proofOfPossession,
-    };
-    final raw = await methodChannel.invokeMethod<List<Object?>>(
-        'scanWifiNetworks', args);
-    final List<String> networks = [];
-    if (raw != null) {
-      networks.addAll(raw.cast<String>());
-    }
-    return networks;
+    });
+
+    return result.map((networkMap) {
+      return WiFiNetwork(
+        ssid: networkMap['ssid'],
+        rssi: networkMap['rssi'],
+      );
+    }).toList();
   }
 
   @override

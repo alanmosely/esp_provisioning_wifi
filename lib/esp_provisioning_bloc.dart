@@ -92,7 +92,7 @@ class EspProvisioningBloc
           timedOut: timedOut,
         ),
       );
-      var scannedNetworks = <String>[];
+      var scannedNetworks = <WiFiNetwork>[];
       scannedNetworks = await espProvisioningService
           .scanWifiNetworks(event.bluetoothDevice, event.proofOfPossession)
           .timeout(const Duration(seconds: TIMEOUT), onTimeout: () {
