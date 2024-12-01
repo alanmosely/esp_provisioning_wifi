@@ -29,6 +29,8 @@ apply plugin: 'com.android.library'
 apply plugin: 'kotlin-android'
 
 android {
+    namespace "how.virc.flutter_esp_ble_prov"
+
     compileSdkVersion 31
 
     compileOptions {
