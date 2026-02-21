@@ -73,6 +73,22 @@ void main() {
     expect(provisioned, isTrue);
   });
 
+  test('provisionWifi returns false on null response', () async {
+    handler = (MethodCall call) async {
+      expect(call.method, 'provisionWifi');
+      return null;
+    };
+
+    final provisioned = await platform.provisionWifi(
+      'PROV_01',
+      'abcd1234',
+      'home-wifi',
+      'secret',
+    );
+
+    expect(provisioned, isFalse);
+  });
+
   test('scan methods return empty lists on null response', () async {
     handler = (MethodCall call) async {
       if (call.method == 'scanBleDevices') {
@@ -86,5 +102,26 @@ void main() {
 
     expect(await platform.scanBleDevices('PROV_'), isEmpty);
     expect(await platform.scanWifiNetworks('PROV_01', 'abcd1234'), isEmpty);
+  });
+
+  test('scan methods throw when response contains non-string values', () async {
+    handler = (MethodCall call) async {
+      if (call.method == 'scanBleDevices') {
+        return <Object?>['ok', 1];
+      }
+      if (call.method == 'scanWifiNetworks') {
+        return <Object?>[true];
+      }
+      throw UnimplementedError(call.method);
+    };
+
+    await expectLater(
+      platform.scanBleDevices('PROV_'),
+      throwsA(isA<PlatformException>()),
+    );
+    await expectLater(
+      platform.scanWifiNetworks('PROV_01', 'abcd1234'),
+      throwsA(isA<PlatformException>()),
+    );
   });
 }

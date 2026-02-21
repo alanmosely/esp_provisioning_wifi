@@ -1,7 +1,7 @@
 name: esp_provisioning_wifi
 description: Bloc wrapper over 'flutter_esp_ble_prov' which provisions WiFi on
   Espressif ESP32 devices over Bluetooth using Espressif-provided provisioning libraries.
-version: 0.0.7
+version: 0.1.0
 repository: https://github.com/alanmosely/esp_provisioning_wifi
 issue_tracker: https://github.com/alanmosely/esp_provisioning_wifi/issues
 
@@ -13,6 +13,7 @@ dependencies:
   flutter:
     sdk: flutter
   flutter_bloc: ^8.1.6
+  bloc_concurrency: ^0.2.5
   equatable: ^2.0.7
   plugin_platform_interface: ^2.0.2
   permission_handler: ^11.4.0

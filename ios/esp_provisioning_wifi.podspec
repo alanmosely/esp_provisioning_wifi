@@ -4,7 +4,7 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'esp_provisioning_wifi'
-  s.version          = '0.0.7'
+  s.version          = '0.1.0'
   s.summary          = 'Provision ESP32 WiFi over BLE from Flutter.'
   s.description      = <<-DESC
 Flutter plugin and BLoC wrapper for provisioning ESP32 devices over BLE

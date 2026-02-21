@@ -20,15 +20,33 @@ void main() {
     test('check initial state', () {
       expect(
           espProvisioningBloc.state,
-          const EspProvisioningState(
+          EspProvisioningState(
             status: EspProvisioningStatus.initial,
-            bluetoothDevices: <String>[],
+            bluetoothDevices: const <String>[],
             bluetoothDevice: "",
-            wifiNetworks: <String>[],
+            wifiNetworks: const <String>[],
             wifiNetwork: "",
             wifiProvisioned: false,
             errorMsg: "",
           ));
+    });
+
+    test('defensively copies list inputs', () {
+      final bluetoothDevices = <String>['device-1'];
+      final wifiNetworks = <String>['ssid-1'];
+      final state = EspProvisioningState(
+        bluetoothDevices: bluetoothDevices,
+        wifiNetworks: wifiNetworks,
+      );
+
+      bluetoothDevices.add('device-2');
+      wifiNetworks.add('ssid-2');
+
+      expect(state.bluetoothDevices, <String>['device-1']);
+      expect(state.wifiNetworks, <String>['ssid-1']);
+      expect(
+          () => state.bluetoothDevices.add('device-3'), throwsUnsupportedError);
+      expect(() => state.wifiNetworks.add('ssid-3'), throwsUnsupportedError);
     });
 
     blocTest(
@@ -37,7 +55,7 @@ void main() {
       act: (bloc) =>
           bloc.add(const EspProvisioningEventBleSelected("device", "prefix")),
       expect: () => [
-        const EspProvisioningState(
+        EspProvisioningState(
             status: EspProvisioningStatus.deviceChosen,
             bluetoothDevice: "device")
       ],
@@ -48,7 +66,7 @@ void main() {
       act: (bloc) => bloc.add(const EspProvisioningEventWifiSelected(
           "device", "pop", "ssid", "password")),
       expect: () => [
-        const EspProvisioningState(
+        EspProvisioningState(
             status: EspProvisioningStatus.networkChosen, wifiNetwork: "ssid")
       ],
     );

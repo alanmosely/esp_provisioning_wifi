@@ -118,7 +118,7 @@ private class BLEProvisionService: ProvisionService {
             device in
             device?.scanWifiList { wifiList, error in
                 if let error = error {
-                    NSLog("Error scanning wifi networks, deviceName: \(deviceName) ")
+                    NSLog("Error scanning Wi-Fi networks")
                     self.fail(error: error)
                     return
                 }
@@ -134,12 +134,12 @@ private class BLEProvisionService: ProvisionService {
             device?.provision(ssid: ssid, passPhrase: passphrase) { status in
                 switch status {
                 case .success:
-                    NSLog("Success provisioning device. ssid: \(ssid), deviceName: \(deviceName) ")
+                    NSLog("Device provisioning succeeded")
                     self.resolve(true)
                 case .configApplied:
-                    NSLog("Wifi config applied device. ssid: \(ssid), deviceName: \(deviceName) ")
+                    NSLog("Wi-Fi config applied")
                 case .failure:
-                    NSLog("Failed to provision device. ssid: \(ssid), deviceName: \(deviceName) ")
+                    NSLog("Device provisioning failed")
                     self.resolve(false)
                 }
             }

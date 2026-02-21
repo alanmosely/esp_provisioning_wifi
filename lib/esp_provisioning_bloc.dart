@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:bloc_concurrency/bloc_concurrency.dart';
 import 'package:esp_provisioning_wifi/src/flutter_esp_ble_prov/flutter_esp_ble_prov.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'esp_provisioning_constants.dart';
@@ -22,10 +24,19 @@ class EspProvisioningBloc
             provisioningService ?? EspProvisioningService(),
         _bluetoothPermissionRequest = bluetoothPermissionRequest,
         _requestTimeout = requestTimeout ?? const Duration(seconds: TIMEOUT),
-        super(const EspProvisioningState()) {
-    on<EspProvisioningEventStart>(_onStart);
-    on<EspProvisioningEventBleSelected>(_onBleSelected);
-    on<EspProvisioningEventWifiSelected>(_onWifiSelected);
+        super(EspProvisioningState()) {
+    on<EspProvisioningEventStart>(
+      _onStart,
+      transformer: droppable(),
+    );
+    on<EspProvisioningEventBleSelected>(
+      _onBleSelected,
+      transformer: restartable(),
+    );
+    on<EspProvisioningEventWifiSelected>(
+      _onWifiSelected,
+      transformer: restartable(),
+    );
   }
 
   /// A provisioner service used to communicate with the platform plugin.
@@ -37,9 +48,6 @@ class EspProvisioningBloc
   /// Timeout to apply to scan/provision calls.
   final Duration _requestTimeout;
 
-  /// A boolean variable that is used to check if bluetooth permission has been granted
-  bool bluetoothIsGranted = false;
-
   /// _onStart() is a function that is called when the EspProvisioningEventStart event is emitted
   ///
   /// Args:
@@ -50,32 +58,51 @@ class EspProvisioningBloc
     Emitter<EspProvisioningState> emit,
   ) async {
     try {
+      final bool bluetoothIsGranted;
       if (_bluetoothPermissionRequest != null) {
         bluetoothIsGranted = await _bluetoothPermissionRequest!();
       } else {
-        await requestBluetoothPermission();
+        bluetoothIsGranted = await requestBluetoothPermission();
       }
       if (bluetoothIsGranted) {
-        emit(state.copyWith(status: EspProvisioningStatus.initial));
+        bool timedOut = false;
+        emit(state.copyWith(
+          status: EspProvisioningStatus.initial,
+          timedOut: false,
+          errorMsg: '',
+          failure: EspProvisioningFailure.none,
+        ));
 
         final scannedDevices = await espProvisioningService
             .scanBleDevices(event.bluetoothDevicePrefix)
-            .timeout(_requestTimeout, onTimeout: () => List.empty());
+            .timeout(_requestTimeout, onTimeout: () {
+          timedOut = true;
+          return List.empty();
+        });
 
         emit(state.copyWith(
           status: EspProvisioningStatus.bleScanned,
           bluetoothDevices: scannedDevices,
+          timedOut: timedOut,
+          errorMsg: timedOut ? 'BLE scan timed out' : '',
+          failure: timedOut
+              ? EspProvisioningFailure.timeout
+              : EspProvisioningFailure.none,
         ));
       } else {
         emit(state.copyWith(
           status: EspProvisioningStatus.error,
           errorMsg: 'Bluetooth permission not granted',
+          failure: EspProvisioningFailure.permissionDenied,
         ));
       }
-    } catch (e) {
+    } on Object catch (e) {
+      final failure = _mapFailure(e);
       emit(state.copyWith(
         status: EspProvisioningStatus.error,
-        errorMsg: e.toString(),
+        errorMsg: _mapErrorMessage(e),
+        failure: failure,
+        timedOut: failure == EspProvisioningFailure.timeout,
       ));
     }
   }
@@ -98,6 +125,8 @@ class EspProvisioningBloc
             status: EspProvisioningStatus.initial,
             bluetoothDevices: List.empty(),
             timedOut: timedOut,
+            errorMsg: '',
+            failure: EspProvisioningFailure.none,
           ),
         );
       }
@@ -106,6 +135,8 @@ class EspProvisioningBloc
           status: EspProvisioningStatus.deviceChosen,
           bluetoothDevice: event.bluetoothDevice,
           timedOut: timedOut,
+          errorMsg: '',
+          failure: EspProvisioningFailure.none,
         ),
       );
       var scannedNetworks = <String>[];
@@ -121,11 +152,20 @@ class EspProvisioningBloc
           bluetoothDevice: event.bluetoothDevice,
           wifiNetworks: scannedNetworks,
           timedOut: timedOut,
+          errorMsg: timedOut ? 'WiFi scan timed out' : '',
+          failure: timedOut
+              ? EspProvisioningFailure.timeout
+              : EspProvisioningFailure.none,
         ),
       );
-    } catch (e) {
+    } on Object catch (e) {
+      final failure = _mapFailure(e);
       emit(state.copyWith(
-          status: EspProvisioningStatus.error, errorMsg: e.toString()));
+        status: EspProvisioningStatus.error,
+        errorMsg: _mapErrorMessage(e),
+        failure: failure,
+        timedOut: failure == EspProvisioningFailure.timeout,
+      ));
     }
   }
 
@@ -139,7 +179,6 @@ class EspProvisioningBloc
     EspProvisioningEventWifiSelected event,
     Emitter<EspProvisioningState> emit,
   ) async {
-    bool wifiProvisioned = false;
     bool timedOut = false;
     try {
       emit(
@@ -147,35 +186,44 @@ class EspProvisioningBloc
           status: EspProvisioningStatus.networkChosen,
           wifiNetwork: event.wifiNetwork,
           timedOut: timedOut,
+          errorMsg: '',
+          failure: EspProvisioningFailure.none,
         ),
       );
-      final provisionFuture = espProvisioningService
+      final wifiProvisioned = await espProvisioningService
           .provisionWifi(event.bluetoothDevice, event.proofOfPossession,
               event.wifiNetwork, event.password)
-          .then<bool?>((value) => value);
-      wifiProvisioned = (await provisionFuture.timeout(
-            _requestTimeout,
-            onTimeout: () {
-              timedOut = true;
-              return false;
-            },
-          )) ??
-          false;
+          .timeout(
+        _requestTimeout,
+        onTimeout: () {
+          timedOut = true;
+          return false;
+        },
+      );
       emit(state.copyWith(
         status: EspProvisioningStatus.wifiProvisioned,
         wifiProvisioned: wifiProvisioned,
         timedOut: timedOut,
+        errorMsg: timedOut ? 'WiFi provisioning timed out' : '',
+        failure: timedOut
+            ? EspProvisioningFailure.timeout
+            : EspProvisioningFailure.none,
       ));
-    } catch (e) {
+    } on Object catch (e) {
+      final failure = _mapFailure(e);
       emit(state.copyWith(
-          status: EspProvisioningStatus.error, errorMsg: e.toString()));
+        status: EspProvisioningStatus.error,
+        errorMsg: _mapErrorMessage(e),
+        failure: failure,
+        timedOut: failure == EspProvisioningFailure.timeout,
+      ));
     }
   }
 
   /// requestBluetoothPermission() is a function that requests bluetooth permission from the user
   /// using the permission_handler package
-  Future<void> requestBluetoothPermission() async {
-    bluetoothIsGranted = false;
+  Future<bool> requestBluetoothPermission() async {
+    bool bluetoothIsGranted = false;
     if (Platform.isAndroid) {
       Map<Permission, PermissionStatus> status = await [
         Permission.bluetoothScan,
@@ -190,5 +238,30 @@ class EspProvisioningBloc
       bluetoothIsGranted =
           status[Permission.bluetooth] == PermissionStatus.granted;
     }
+    return bluetoothIsGranted;
+  }
+
+  EspProvisioningFailure _mapFailure(Object error) {
+    if (error is TimeoutException) {
+      return EspProvisioningFailure.timeout;
+    }
+    if (error is PlatformException) {
+      switch (error.code) {
+        case 'E_DEVICE_NOT_FOUND':
+          return EspProvisioningFailure.deviceNotFound;
+        case 'E_INVALID_RESPONSE':
+          return EspProvisioningFailure.invalidResponse;
+        default:
+          return EspProvisioningFailure.platform;
+      }
+    }
+    return EspProvisioningFailure.unknown;
+  }
+
+  String _mapErrorMessage(Object error) {
+    if (error is PlatformException) {
+      return error.message ?? 'Platform error: ${error.code}';
+    }
+    return error.toString();
   }
 }

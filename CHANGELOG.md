@@ -1,3 +1,10 @@
+## 0.1.0
+
+* Alpha: Add typed BLoC failure reasons via `EspProvisioningFailure`
+* Alpha: Make `provisionWifi` return non-null `bool`
+* Alpha: Split Android plugin internals into focused Kotlin files
+* Alpha: Add transformer behavior tests (`droppable` and `restartable`)
+
 ## 0.0.7
 
 * Alpha: Harden Android/iOS plugin error handling and permission flow

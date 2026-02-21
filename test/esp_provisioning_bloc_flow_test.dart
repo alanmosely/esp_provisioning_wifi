@@ -5,13 +5,14 @@ import 'package:esp_provisioning_wifi/esp_provisioning_bloc.dart';
 import 'package:esp_provisioning_wifi/esp_provisioning_event.dart';
 import 'package:esp_provisioning_wifi/esp_provisioning_state.dart';
 import 'package:esp_provisioning_wifi/src/flutter_esp_ble_prov/flutter_esp_ble_prov.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 class FakeProvisioningService extends FlutterEspBleProv {
   FakeProvisioningService({
     Future<List<String>> Function(String prefix)? scanBleDevicesHandler,
     Future<List<String>> Function(String deviceName, String pop)?
         scanWifiNetworksHandler,
-    Future<bool?> Function(
+    Future<bool> Function(
       String deviceName,
       String pop,
       String ssid,
@@ -24,15 +25,20 @@ class FakeProvisioningService extends FlutterEspBleProv {
   final Future<List<String>> Function(String prefix)? _scanBleDevicesHandler;
   final Future<List<String>> Function(String deviceName, String pop)?
       _scanWifiNetworksHandler;
-  final Future<bool?> Function(
+  final Future<bool> Function(
     String deviceName,
     String pop,
     String ssid,
     String passphrase,
   )? _provisionWifiHandler;
 
+  int scanBleDevicesCalls = 0;
+  int scanWifiNetworksCalls = 0;
+  int provisionWifiCalls = 0;
+
   @override
   Future<List<String>> scanBleDevices(String prefix) {
+    scanBleDevicesCalls++;
     if (_scanBleDevicesHandler == null) {
       return Future<List<String>>.value(const <String>[]);
     }
@@ -42,6 +48,7 @@ class FakeProvisioningService extends FlutterEspBleProv {
   @override
   Future<List<String>> scanWifiNetworks(
       String deviceName, String proofOfPossession) {
+    scanWifiNetworksCalls++;
     if (_scanWifiNetworksHandler == null) {
       return Future<List<String>>.value(const <String>[]);
     }
@@ -49,10 +56,11 @@ class FakeProvisioningService extends FlutterEspBleProv {
   }
 
   @override
-  Future<bool?> provisionWifi(String deviceName, String proofOfPossession,
+  Future<bool> provisionWifi(String deviceName, String proofOfPossession,
       String ssid, String passphrase) {
+    provisionWifiCalls++;
     if (_provisionWifiHandler == null) {
-      return Future<bool?>.value(false);
+      return Future<bool>.value(false);
     }
     return _provisionWifiHandler!(
       deviceName,
@@ -65,17 +73,18 @@ class FakeProvisioningService extends FlutterEspBleProv {
 
 void main() {
   blocTest<EspProvisioningBloc, EspProvisioningState>(
-    'emits error when bluetooth permission is denied',
+    'emits typed permission error when bluetooth permission is denied',
     build: () => EspProvisioningBloc(
       provisioningService: FakeProvisioningService(),
       bluetoothPermissionRequest: () async => false,
       requestTimeout: const Duration(milliseconds: 10),
     ),
     act: (bloc) => bloc.add(const EspProvisioningEventStart('PROV_')),
-    expect: () => const <EspProvisioningState>[
+    expect: () => <EspProvisioningState>[
       EspProvisioningState(
         status: EspProvisioningStatus.error,
         errorMsg: 'Bluetooth permission not granted',
+        failure: EspProvisioningFailure.permissionDenied,
       ),
     ],
   );
@@ -90,19 +99,19 @@ void main() {
       requestTimeout: const Duration(milliseconds: 10),
     ),
     act: (bloc) => bloc.add(const EspProvisioningEventStart('PROV_')),
-    expect: () => const <EspProvisioningState>[
+    expect: () => <EspProvisioningState>[
       EspProvisioningState(
         status: EspProvisioningStatus.initial,
       ),
       EspProvisioningState(
         status: EspProvisioningStatus.bleScanned,
-        bluetoothDevices: <String>['PROV_1', 'PROV_2'],
+        bluetoothDevices: const <String>['PROV_1', 'PROV_2'],
       ),
     ],
   );
 
   blocTest<EspProvisioningBloc, EspProvisioningState>(
-    'emits timeout state when WiFi scan exceeds timeout',
+    'emits timeout state and failure type when WiFi scan exceeds timeout',
     build: () => EspProvisioningBloc(
       provisioningService: FakeProvisioningService(
         scanWifiNetworksHandler: (_, __) => Completer<List<String>>().future,
@@ -113,7 +122,7 @@ void main() {
     act: (bloc) =>
         bloc.add(const EspProvisioningEventBleSelected('PROV_1', 'abcd1234')),
     wait: const Duration(milliseconds: 30),
-    expect: () => const <EspProvisioningState>[
+    expect: () => <EspProvisioningState>[
       EspProvisioningState(
         status: EspProvisioningStatus.deviceChosen,
         bluetoothDevice: 'PROV_1',
@@ -121,17 +130,19 @@ void main() {
       EspProvisioningState(
         status: EspProvisioningStatus.wifiScanned,
         bluetoothDevice: 'PROV_1',
-        wifiNetworks: <String>[],
+        wifiNetworks: const <String>[],
         timedOut: true,
+        errorMsg: 'WiFi scan timed out',
+        failure: EspProvisioningFailure.timeout,
       ),
     ],
   );
 
   blocTest<EspProvisioningBloc, EspProvisioningState>(
-    'handles null provision result as false without throwing',
+    'handles provision result as bool without throwing',
     build: () => EspProvisioningBloc(
       provisioningService: FakeProvisioningService(
-        provisionWifiHandler: (_, __, ___, ____) => Future<bool?>.value(null),
+        provisionWifiHandler: (_, __, ___, ____) => Future<bool>.value(false),
       ),
       bluetoothPermissionRequest: () async => true,
       requestTimeout: const Duration(milliseconds: 10),
@@ -142,7 +153,7 @@ void main() {
       'home-wifi',
       'secret',
     )),
-    expect: () => const <EspProvisioningState>[
+    expect: () => <EspProvisioningState>[
       EspProvisioningState(
         status: EspProvisioningStatus.networkChosen,
         wifiNetwork: 'home-wifi',
@@ -156,7 +167,7 @@ void main() {
   );
 
   blocTest<EspProvisioningBloc, EspProvisioningState>(
-    'emits error when WiFi scan throws',
+    'emits typed unknown failure when WiFi scan throws',
     build: () => EspProvisioningBloc(
       provisioningService: FakeProvisioningService(
         scanWifiNetworksHandler: (_, __) => Future<List<String>>.error(
@@ -168,7 +179,7 @@ void main() {
     ),
     act: (bloc) =>
         bloc.add(const EspProvisioningEventBleSelected('PROV_1', 'abcd1234')),
-    expect: () => const <EspProvisioningState>[
+    expect: () => <EspProvisioningState>[
       EspProvisioningState(
         status: EspProvisioningStatus.deviceChosen,
         bluetoothDevice: 'PROV_1',
@@ -177,6 +188,128 @@ void main() {
         status: EspProvisioningStatus.error,
         bluetoothDevice: 'PROV_1',
         errorMsg: 'Exception: scan failed',
+        failure: EspProvisioningFailure.unknown,
+      ),
+    ],
+  );
+
+  blocTest<EspProvisioningBloc, EspProvisioningState>(
+    'drops overlapping start events (droppable)',
+    build: () {
+      final service = FakeProvisioningService(
+        scanBleDevicesHandler: (prefix) async {
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+          return <String>['$prefix-device'];
+        },
+      );
+      return EspProvisioningBloc(
+        provisioningService: service,
+        bluetoothPermissionRequest: () async => true,
+        requestTimeout: const Duration(milliseconds: 250),
+      );
+    },
+    act: (bloc) {
+      bloc.add(const EspProvisioningEventStart('FIRST'));
+      bloc.add(const EspProvisioningEventStart('SECOND'));
+    },
+    wait: const Duration(milliseconds: 120),
+    expect: () => <EspProvisioningState>[
+      EspProvisioningState(status: EspProvisioningStatus.initial),
+      EspProvisioningState(
+        status: EspProvisioningStatus.bleScanned,
+        bluetoothDevices: const <String>['FIRST-device'],
+      ),
+    ],
+    verify: (bloc) {
+      final service = bloc.espProvisioningService as FakeProvisioningService;
+      expect(service.scanBleDevicesCalls, 1);
+    },
+  );
+
+  blocTest<EspProvisioningBloc, EspProvisioningState>(
+    'keeps only latest WiFi scan completion (restartable ble selection)',
+    build: () => EspProvisioningBloc(
+      provisioningService: FakeProvisioningService(
+        scanWifiNetworksHandler: (deviceName, _) async {
+          if (deviceName == 'first') {
+            await Future<void>.delayed(const Duration(milliseconds: 80));
+            return const <String>['old-network'];
+          }
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+          return const <String>['new-network'];
+        },
+      ),
+      bluetoothPermissionRequest: () async => true,
+      requestTimeout: const Duration(milliseconds: 250),
+    ),
+    act: (bloc) async {
+      bloc.add(const EspProvisioningEventBleSelected('first', 'pop'));
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+      bloc.add(const EspProvisioningEventBleSelected('second', 'pop'));
+    },
+    wait: const Duration(milliseconds: 140),
+    expect: () => <EspProvisioningState>[
+      EspProvisioningState(
+        status: EspProvisioningStatus.deviceChosen,
+        bluetoothDevice: 'first',
+      ),
+      EspProvisioningState(
+        status: EspProvisioningStatus.deviceChosen,
+        bluetoothDevice: 'second',
+      ),
+      EspProvisioningState(
+        status: EspProvisioningStatus.wifiScanned,
+        bluetoothDevice: 'second',
+        wifiNetworks: const <String>['new-network'],
+      ),
+    ],
+  );
+
+  blocTest<EspProvisioningBloc, EspProvisioningState>(
+    'keeps only latest provisioning completion (restartable wifi selection)',
+    build: () => EspProvisioningBloc(
+      provisioningService: FakeProvisioningService(
+        provisionWifiHandler: (_, __, ssid, ___) async {
+          if (ssid == 'slow') {
+            await Future<void>.delayed(const Duration(milliseconds: 80));
+            return false;
+          }
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+          return true;
+        },
+      ),
+      bluetoothPermissionRequest: () async => true,
+      requestTimeout: const Duration(milliseconds: 250),
+    ),
+    act: (bloc) async {
+      bloc.add(const EspProvisioningEventWifiSelected(
+        'PROV_1',
+        'abcd1234',
+        'slow',
+        'secret',
+      ));
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+      bloc.add(const EspProvisioningEventWifiSelected(
+        'PROV_1',
+        'abcd1234',
+        'fast',
+        'secret',
+      ));
+    },
+    wait: const Duration(milliseconds: 140),
+    expect: () => <EspProvisioningState>[
+      EspProvisioningState(
+        status: EspProvisioningStatus.networkChosen,
+        wifiNetwork: 'slow',
+      ),
+      EspProvisioningState(
+        status: EspProvisioningStatus.networkChosen,
+        wifiNetwork: 'fast',
+      ),
+      EspProvisioningState(
+        status: EspProvisioningStatus.wifiProvisioned,
+        wifiNetwork: 'fast',
+        wifiProvisioned: true,
       ),
     ],
   );

@@ -21,11 +21,7 @@ class MethodChannelFlutterEspBleProv extends FlutterEspBleProvPlatform {
     final args = {'prefix': prefix};
     final raw =
         await methodChannel.invokeMethod<List<Object?>>('scanBleDevices', args);
-    final List<String> devices = [];
-    if (raw != null) {
-      devices.addAll(raw.cast<String>());
-    }
-    return devices;
+    return _decodeStringList(methodName: 'scanBleDevices', raw: raw);
   }
 
   @override
@@ -37,15 +33,11 @@ class MethodChannelFlutterEspBleProv extends FlutterEspBleProvPlatform {
     };
     final raw = await methodChannel.invokeMethod<List<Object?>>(
         'scanWifiNetworks', args);
-    final List<String> networks = [];
-    if (raw != null) {
-      networks.addAll(raw.cast<String>());
-    }
-    return networks;
+    return _decodeStringList(methodName: 'scanWifiNetworks', raw: raw);
   }
 
   @override
-  Future<bool?> provisionWifi(String deviceName, String proofOfPossession,
+  Future<bool> provisionWifi(String deviceName, String proofOfPossession,
       String ssid, String passphrase) async {
     final args = {
       'deviceName': deviceName,
@@ -53,6 +45,27 @@ class MethodChannelFlutterEspBleProv extends FlutterEspBleProvPlatform {
       'ssid': ssid,
       'passphrase': passphrase
     };
-    return await methodChannel.invokeMethod<bool?>('provisionWifi', args);
+    final result =
+        await methodChannel.invokeMethod<bool?>('provisionWifi', args);
+    return result ?? false;
+  }
+
+  List<String> _decodeStringList({
+    required String methodName,
+    required List<Object?>? raw,
+  }) {
+    if (raw == null) {
+      return const <String>[];
+    }
+    for (final item in raw) {
+      if (item is! String) {
+        throw PlatformException(
+          code: 'E_INVALID_RESPONSE',
+          message: 'Invalid response type from $methodName',
+          details: 'Expected a list of strings from platform channel.',
+        );
+      }
+    }
+    return List<String>.from(raw);
   }
 }

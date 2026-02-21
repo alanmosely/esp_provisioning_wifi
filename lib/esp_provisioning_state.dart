@@ -1,5 +1,3 @@
-import 'dart:collection';
-
 import 'package:equatable/equatable.dart';
 
 /// A list of all the possible states that the ESP provisioning can be in
@@ -13,10 +11,21 @@ enum EspProvisioningStatus {
   error,
 }
 
+/// A typed reason for a failed provisioning action.
+enum EspProvisioningFailure {
+  none,
+  permissionDenied,
+  timeout,
+  deviceNotFound,
+  invalidResponse,
+  platform,
+  unknown,
+}
+
 /// EspProvisioningState is a class that contains a bunch of properties that are used to store the state
 /// of the ESP provisioning
 class EspProvisioningState extends Equatable {
-  const EspProvisioningState({
+  EspProvisioningState({
     this.status = EspProvisioningStatus.initial,
     List<String> bluetoothDevices = const <String>[],
     this.bluetoothDevice = "",
@@ -25,8 +34,10 @@ class EspProvisioningState extends Equatable {
     this.wifiProvisioned = false,
     this.timedOut = false,
     this.errorMsg = "",
-  })  : _bluetoothDevices = bluetoothDevices,
-        _wifiNetworks = wifiNetworks;
+    this.failure = EspProvisioningFailure.none,
+  })  : _bluetoothDevices =
+            List.unmodifiable(List<String>.of(bluetoothDevices)),
+        _wifiNetworks = List.unmodifiable(List<String>.of(wifiNetworks));
 
   final EspProvisioningStatus status;
   final List<String> _bluetoothDevices;
@@ -36,9 +47,10 @@ class EspProvisioningState extends Equatable {
   final bool wifiProvisioned;
   final bool timedOut;
   final String errorMsg;
+  final EspProvisioningFailure failure;
 
-  List<String> get bluetoothDevices => UnmodifiableListView(_bluetoothDevices);
-  List<String> get wifiNetworks => UnmodifiableListView(_wifiNetworks);
+  List<String> get bluetoothDevices => _bluetoothDevices;
+  List<String> get wifiNetworks => _wifiNetworks;
 
   EspProvisioningState copyWith({
     EspProvisioningStatus? status,
@@ -49,24 +61,24 @@ class EspProvisioningState extends Equatable {
     bool? wifiProvisioned,
     bool? timedOut,
     String? errorMsg,
+    EspProvisioningFailure? failure,
   }) {
     return EspProvisioningState(
       status: status ?? this.status,
-      bluetoothDevices: List.unmodifiable(
-          List<String>.of(bluetoothDevices ?? _bluetoothDevices)),
+      bluetoothDevices: bluetoothDevices ?? _bluetoothDevices,
       bluetoothDevice: bluetoothDevice ?? this.bluetoothDevice,
-      wifiNetworks:
-          List.unmodifiable(List<String>.of(wifiNetworks ?? _wifiNetworks)),
+      wifiNetworks: wifiNetworks ?? _wifiNetworks,
       wifiNetwork: wifiNetwork ?? this.wifiNetwork,
       wifiProvisioned: wifiProvisioned ?? this.wifiProvisioned,
       timedOut: timedOut ?? this.timedOut,
       errorMsg: errorMsg ?? this.errorMsg,
+      failure: failure ?? this.failure,
     );
   }
 
   @override
   String toString() {
-    return 'EspProvisioningState { status: $status, bluetoothDevices: ${bluetoothDevices.length}, bluetoothDevice: $bluetoothDevice, wifiNetworks: ${wifiNetworks.length}, wifiNetwork: $wifiNetwork, wifiProvisioned: $wifiProvisioned, timedOut: $timedOut, errorMsg: $errorMsg }';
+    return 'EspProvisioningState { status: $status, bluetoothDevices: ${bluetoothDevices.length}, bluetoothDevice: $bluetoothDevice, wifiNetworks: ${wifiNetworks.length}, wifiNetwork: $wifiNetwork, wifiProvisioned: $wifiProvisioned, timedOut: $timedOut, errorMsg: $errorMsg, failure: $failure }';
   }
 
   @override
@@ -78,6 +90,7 @@ class EspProvisioningState extends Equatable {
         wifiNetwork,
         wifiProvisioned,
         timedOut,
-        errorMsg
+        errorMsg,
+        failure
       ];
 }
