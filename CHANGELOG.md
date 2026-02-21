@@ -2,8 +2,19 @@
 
 * Alpha: Add typed BLoC failure reasons via `EspProvisioningFailure`
 * Alpha: Make `provisionWifi` return non-null `bool`
+* Alpha: Replace `EspProvisioningState.timedOut` with typed failure checks
+* Alpha: Consolidate native/platform error code contracts into shared constants
+* Alpha: Add `cancelOperations()` to Dart/platform APIs and native implementations
+* Alpha: Add structured bloc diagnostics (`errorCode`, `errorDetails`) to state
+* Alpha: Add typed `cancelled` failure mapping for `E_CANCELLED`
+* Alpha: Unify configurable connect timeout propagation across Dart/Android/iOS layers
+* Alpha: Add iOS operation-token cancellation guards and active-device cleanup
+* Alpha: Add public barrel export (`esp_provisioning_wifi.dart`) to avoid `src` imports
 * Alpha: Split Android plugin internals into focused Kotlin files
 * Alpha: Add transformer behavior tests (`droppable` and `restartable`)
+* Alpha: Improve example app to render status/failure transitions via Bloc state
+* Alpha: Separate state-only tests from bloc behavior smoke tests
+* Alpha: Add example integration test for baseline platform channel contract
 
 ## 0.0.7
 

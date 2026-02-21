@@ -32,12 +32,24 @@ abstract class FlutterEspBleProvPlatform extends PlatformInterface {
   }
 
   Future<List<String>> scanWifiNetworks(
-      String deviceName, String proofOfPossession) {
+    String deviceName,
+    String proofOfPossession, {
+    Duration? connectTimeout,
+  }) {
     throw UnimplementedError('scanWifiNetworks has not been implemented.');
   }
 
-  Future<bool> provisionWifi(String deviceName, String proofOfPossession,
-      String ssid, String passphrase) {
+  Future<bool> provisionWifi(
+    String deviceName,
+    String proofOfPossession,
+    String ssid,
+    String passphrase, {
+    Duration? connectTimeout,
+  }) {
     throw UnimplementedError('provisionWifi has not been implemented');
+  }
+
+  Future<bool> cancelOperations() {
+    throw UnimplementedError('cancelOperations has not been implemented');
   }
 }

@@ -2,15 +2,16 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:bloc_concurrency/bloc_concurrency.dart';
-import 'package:esp_provisioning_wifi/src/flutter_esp_ble_prov/flutter_esp_ble_prov.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'esp_provisioning_constants.dart';
+import 'esp_provisioning_error_codes.dart';
 import 'esp_provisioning_event.dart';
 import 'esp_provisioning_service.dart';
 import 'esp_provisioning_state.dart';
+import 'src/flutter_esp_ble_prov/flutter_esp_ble_prov.dart';
 
 /// The EspProvisioningBloc class is a BLoC that handles EspProvisioningEvents and emits
 /// EspProvisioningStates
@@ -65,45 +66,38 @@ class EspProvisioningBloc
         bluetoothIsGranted = await requestBluetoothPermission();
       }
       if (bluetoothIsGranted) {
-        bool timedOut = false;
-        emit(state.copyWith(
+        await _cancelOperations();
+        _emitStateWithClearedError(
+          emit,
           status: EspProvisioningStatus.initial,
-          timedOut: false,
-          errorMsg: '',
-          failure: EspProvisioningFailure.none,
-        ));
+        );
 
-        final scannedDevices = await espProvisioningService
-            .scanBleDevices(event.bluetoothDevicePrefix)
-            .timeout(_requestTimeout, onTimeout: () {
-          timedOut = true;
-          return List.empty();
-        });
+        final timedScan = await _runWithTimeout<List<String>>(
+          () => espProvisioningService.scanBleDevices(
+            event.bluetoothDevicePrefix,
+          ),
+          const <String>[],
+        );
 
-        emit(state.copyWith(
+        _emitStateWithTimeoutResult(
+          emit,
           status: EspProvisioningStatus.bleScanned,
-          bluetoothDevices: scannedDevices,
-          timedOut: timedOut,
-          errorMsg: timedOut ? 'BLE scan timed out' : '',
-          failure: timedOut
-              ? EspProvisioningFailure.timeout
-              : EspProvisioningFailure.none,
-        ));
+          bluetoothDevices: timedScan.value,
+          timedOut: timedScan.timedOut,
+          timeoutOperation: 'scanBleDevices',
+          timeoutMessage: 'BLE scan timed out',
+        );
       } else {
         emit(state.copyWith(
           status: EspProvisioningStatus.error,
+          errorCode: EspProvisioningErrorCodes.permission,
+          errorDetails: null,
           errorMsg: 'Bluetooth permission not granted',
           failure: EspProvisioningFailure.permissionDenied,
         ));
       }
     } on Object catch (e) {
-      final failure = _mapFailure(e);
-      emit(state.copyWith(
-        status: EspProvisioningStatus.error,
-        errorMsg: _mapErrorMessage(e),
-        failure: failure,
-        timedOut: failure == EspProvisioningFailure.timeout,
-      ));
+      _emitUnexpectedError(emit, e);
     }
   }
 
@@ -117,55 +111,40 @@ class EspProvisioningBloc
     EspProvisioningEventBleSelected event,
     Emitter<EspProvisioningState> emit,
   ) async {
-    bool timedOut = false;
     try {
+      await _cancelOperations();
       if (event.bluetoothDevice == '') {
-        return emit(
-          state.copyWith(
-            status: EspProvisioningStatus.initial,
-            bluetoothDevices: List.empty(),
-            timedOut: timedOut,
-            errorMsg: '',
-            failure: EspProvisioningFailure.none,
-          ),
+        _emitStateWithClearedError(
+          emit,
+          status: EspProvisioningStatus.initial,
+          bluetoothDevices: const <String>[],
         );
+        return;
       }
-      emit(
-        state.copyWith(
-          status: EspProvisioningStatus.deviceChosen,
-          bluetoothDevice: event.bluetoothDevice,
-          timedOut: timedOut,
-          errorMsg: '',
-          failure: EspProvisioningFailure.none,
-        ),
+      _emitStateWithClearedError(
+        emit,
+        status: EspProvisioningStatus.deviceChosen,
+        bluetoothDevice: event.bluetoothDevice,
       );
-      var scannedNetworks = <String>[];
-      scannedNetworks = await espProvisioningService
-          .scanWifiNetworks(event.bluetoothDevice, event.proofOfPossession)
-          .timeout(_requestTimeout, onTimeout: () {
-        timedOut = true;
-        return List.empty();
-      });
-      emit(
-        state.copyWith(
-          status: EspProvisioningStatus.wifiScanned,
-          bluetoothDevice: event.bluetoothDevice,
-          wifiNetworks: scannedNetworks,
-          timedOut: timedOut,
-          errorMsg: timedOut ? 'WiFi scan timed out' : '',
-          failure: timedOut
-              ? EspProvisioningFailure.timeout
-              : EspProvisioningFailure.none,
+      final timedScan = await _runWithTimeout<List<String>>(
+        () => espProvisioningService.scanWifiNetworks(
+          event.bluetoothDevice,
+          event.proofOfPossession,
+          connectTimeout: _requestTimeout,
         ),
+        const <String>[],
+      );
+      _emitStateWithTimeoutResult(
+        emit,
+        status: EspProvisioningStatus.wifiScanned,
+        bluetoothDevice: event.bluetoothDevice,
+        wifiNetworks: timedScan.value,
+        timedOut: timedScan.timedOut,
+        timeoutOperation: 'scanWifiNetworks',
+        timeoutMessage: 'WiFi scan timed out',
       );
     } on Object catch (e) {
-      final failure = _mapFailure(e);
-      emit(state.copyWith(
-        status: EspProvisioningStatus.error,
-        errorMsg: _mapErrorMessage(e),
-        failure: failure,
-        timedOut: failure == EspProvisioningFailure.timeout,
-      ));
+      _emitUnexpectedError(emit, e);
     }
   }
 
@@ -179,44 +158,33 @@ class EspProvisioningBloc
     EspProvisioningEventWifiSelected event,
     Emitter<EspProvisioningState> emit,
   ) async {
-    bool timedOut = false;
     try {
-      emit(
-        state.copyWith(
-          status: EspProvisioningStatus.networkChosen,
-          wifiNetwork: event.wifiNetwork,
-          timedOut: timedOut,
-          errorMsg: '',
-          failure: EspProvisioningFailure.none,
+      await _cancelOperations();
+      _emitStateWithClearedError(
+        emit,
+        status: EspProvisioningStatus.networkChosen,
+        wifiNetwork: event.wifiNetwork,
+      );
+      final timedProvision = await _runWithTimeout<bool>(
+        () => espProvisioningService.provisionWifi(
+          event.bluetoothDevice,
+          event.proofOfPossession,
+          event.wifiNetwork,
+          event.password,
+          connectTimeout: _requestTimeout,
         ),
+        false,
       );
-      final wifiProvisioned = await espProvisioningService
-          .provisionWifi(event.bluetoothDevice, event.proofOfPossession,
-              event.wifiNetwork, event.password)
-          .timeout(
-        _requestTimeout,
-        onTimeout: () {
-          timedOut = true;
-          return false;
-        },
-      );
-      emit(state.copyWith(
+      _emitStateWithTimeoutResult(
+        emit,
         status: EspProvisioningStatus.wifiProvisioned,
-        wifiProvisioned: wifiProvisioned,
-        timedOut: timedOut,
-        errorMsg: timedOut ? 'WiFi provisioning timed out' : '',
-        failure: timedOut
-            ? EspProvisioningFailure.timeout
-            : EspProvisioningFailure.none,
-      ));
+        wifiProvisioned: timedProvision.value,
+        timedOut: timedProvision.timedOut,
+        timeoutOperation: 'provisionWifi',
+        timeoutMessage: 'WiFi provisioning timed out',
+      );
     } on Object catch (e) {
-      final failure = _mapFailure(e);
-      emit(state.copyWith(
-        status: EspProvisioningStatus.error,
-        errorMsg: _mapErrorMessage(e),
-        failure: failure,
-        timedOut: failure == EspProvisioningFailure.timeout,
-      ));
+      _emitUnexpectedError(emit, e);
     }
   }
 
@@ -247,9 +215,16 @@ class EspProvisioningBloc
     }
     if (error is PlatformException) {
       switch (error.code) {
-        case 'E_DEVICE_NOT_FOUND':
+        case EspProvisioningErrorCodes.permission:
+          return EspProvisioningFailure.permissionDenied;
+        case EspProvisioningErrorCodes.connectTimeout:
+        case EspProvisioningErrorCodes.timeout:
+          return EspProvisioningFailure.timeout;
+        case EspProvisioningErrorCodes.cancelled:
+          return EspProvisioningFailure.cancelled;
+        case EspProvisioningErrorCodes.deviceNotFound:
           return EspProvisioningFailure.deviceNotFound;
-        case 'E_INVALID_RESPONSE':
+        case EspProvisioningErrorCodes.invalidResponse:
           return EspProvisioningFailure.invalidResponse;
         default:
           return EspProvisioningFailure.platform;
@@ -264,4 +239,122 @@ class EspProvisioningBloc
     }
     return error.toString();
   }
+
+  String _mapErrorCode(Object error) {
+    if (error is TimeoutException) {
+      return EspProvisioningErrorCodes.timeout;
+    }
+    if (error is PlatformException) {
+      return error.code;
+    }
+    return EspProvisioningErrorCodes.unknown;
+  }
+
+  String? _mapErrorDetails(Object error) {
+    if (error is PlatformException && error.details != null) {
+      return error.details.toString();
+    }
+    if (error is TimeoutException) {
+      return error.message;
+    }
+    return null;
+  }
+
+  Future<void> _cancelOperations() async {
+    await espProvisioningService.cancelOperations();
+  }
+
+  void _emitStateWithClearedError(
+    Emitter<EspProvisioningState> emit, {
+    required EspProvisioningStatus status,
+    List<String>? bluetoothDevices,
+    String? bluetoothDevice,
+    List<String>? wifiNetworks,
+    String? wifiNetwork,
+    bool? wifiProvisioned,
+  }) {
+    emit(
+      state.copyWith(
+        status: status,
+        bluetoothDevices: bluetoothDevices,
+        bluetoothDevice: bluetoothDevice,
+        wifiNetworks: wifiNetworks,
+        wifiNetwork: wifiNetwork,
+        wifiProvisioned: wifiProvisioned,
+        errorCode: null,
+        errorDetails: null,
+        errorMsg: '',
+        failure: EspProvisioningFailure.none,
+      ),
+    );
+  }
+
+  void _emitStateWithTimeoutResult(
+    Emitter<EspProvisioningState> emit, {
+    required EspProvisioningStatus status,
+    List<String>? bluetoothDevices,
+    String? bluetoothDevice,
+    List<String>? wifiNetworks,
+    String? wifiNetwork,
+    bool? wifiProvisioned,
+    required bool timedOut,
+    required String timeoutOperation,
+    required String timeoutMessage,
+  }) {
+    emit(
+      state.copyWith(
+        status: status,
+        bluetoothDevices: bluetoothDevices,
+        bluetoothDevice: bluetoothDevice,
+        wifiNetworks: wifiNetworks,
+        wifiNetwork: wifiNetwork,
+        wifiProvisioned: wifiProvisioned,
+        errorCode: timedOut ? EspProvisioningErrorCodes.timeout : null,
+        errorDetails: timedOut
+            ? '$timeoutOperation timeout after $_requestTimeout'
+            : null,
+        errorMsg: timedOut ? timeoutMessage : '',
+        failure: timedOut
+            ? EspProvisioningFailure.timeout
+            : EspProvisioningFailure.none,
+      ),
+    );
+  }
+
+  void _emitUnexpectedError(
+    Emitter<EspProvisioningState> emit,
+    Object error,
+  ) {
+    emit(
+      state.copyWith(
+        status: EspProvisioningStatus.error,
+        errorCode: _mapErrorCode(error),
+        errorDetails: _mapErrorDetails(error),
+        errorMsg: _mapErrorMessage(error),
+        failure: _mapFailure(error),
+      ),
+    );
+  }
+
+  Future<_TimedResult<T>> _runWithTimeout<T>(
+    Future<T> Function() action,
+    T timeoutValue,
+  ) async {
+    var timedOut = false;
+    final value = await action().timeout(
+      _requestTimeout,
+      onTimeout: () {
+        timedOut = true;
+        return timeoutValue;
+      },
+    );
+    return _TimedResult<T>(value: value, timedOut: timedOut);
+  }
+}
+
+class _TimedResult<T> {
+  const _TimedResult({required this.value, required this.timedOut});
+
+  final T value;
+  final bool timedOut;
 }

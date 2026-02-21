@@ -15,8 +15,19 @@ class CallContext(val call: MethodCall, val result: Result) {
   fun arg(name: String): String? {
     val value = call.argument<String>(name)
     if (value == null) {
-      result.error("E0", "Missing argument: $name", "The argument $name was not provided")
+      result.error(
+          ErrorCodes.MISSING_ARGUMENT,
+          "Missing argument: $name",
+          "The argument $name was not provided")
     }
     return value
+  }
+
+  /**
+   * Extracts an optional integer argument from the method call.
+   */
+  fun optionalInt(name: String): Int? {
+    val value = call.argument<Number>(name) ?: return null
+    return value.toInt()
   }
 }

@@ -16,6 +16,7 @@ enum EspProvisioningFailure {
   none,
   permissionDenied,
   timeout,
+  cancelled,
   deviceNotFound,
   invalidResponse,
   platform,
@@ -25,6 +26,8 @@ enum EspProvisioningFailure {
 /// EspProvisioningState is a class that contains a bunch of properties that are used to store the state
 /// of the ESP provisioning
 class EspProvisioningState extends Equatable {
+  static const Object _unset = Object();
+
   EspProvisioningState({
     this.status = EspProvisioningStatus.initial,
     List<String> bluetoothDevices = const <String>[],
@@ -32,7 +35,8 @@ class EspProvisioningState extends Equatable {
     List<String> wifiNetworks = const <String>[],
     this.wifiNetwork = "",
     this.wifiProvisioned = false,
-    this.timedOut = false,
+    this.errorCode,
+    this.errorDetails,
     this.errorMsg = "",
     this.failure = EspProvisioningFailure.none,
   })  : _bluetoothDevices =
@@ -45,7 +49,8 @@ class EspProvisioningState extends Equatable {
   final List<String> _wifiNetworks;
   final String wifiNetwork;
   final bool wifiProvisioned;
-  final bool timedOut;
+  final String? errorCode;
+  final String? errorDetails;
   final String errorMsg;
   final EspProvisioningFailure failure;
 
@@ -59,7 +64,8 @@ class EspProvisioningState extends Equatable {
     List<String>? wifiNetworks,
     String? wifiNetwork,
     bool? wifiProvisioned,
-    bool? timedOut,
+    Object? errorCode = _unset,
+    Object? errorDetails = _unset,
     String? errorMsg,
     EspProvisioningFailure? failure,
   }) {
@@ -70,7 +76,11 @@ class EspProvisioningState extends Equatable {
       wifiNetworks: wifiNetworks ?? _wifiNetworks,
       wifiNetwork: wifiNetwork ?? this.wifiNetwork,
       wifiProvisioned: wifiProvisioned ?? this.wifiProvisioned,
-      timedOut: timedOut ?? this.timedOut,
+      errorCode:
+          identical(errorCode, _unset) ? this.errorCode : errorCode as String?,
+      errorDetails: identical(errorDetails, _unset)
+          ? this.errorDetails
+          : errorDetails as String?,
       errorMsg: errorMsg ?? this.errorMsg,
       failure: failure ?? this.failure,
     );
@@ -78,18 +88,19 @@ class EspProvisioningState extends Equatable {
 
   @override
   String toString() {
-    return 'EspProvisioningState { status: $status, bluetoothDevices: ${bluetoothDevices.length}, bluetoothDevice: $bluetoothDevice, wifiNetworks: ${wifiNetworks.length}, wifiNetwork: $wifiNetwork, wifiProvisioned: $wifiProvisioned, timedOut: $timedOut, errorMsg: $errorMsg, failure: $failure }';
+    return 'EspProvisioningState { status: $status, bluetoothDevices: ${bluetoothDevices.length}, bluetoothDevice: $bluetoothDevice, wifiNetworks: ${wifiNetworks.length}, wifiNetwork: $wifiNetwork, wifiProvisioned: $wifiProvisioned, errorCode: $errorCode, errorDetails: $errorDetails, errorMsg: $errorMsg, failure: $failure }';
   }
 
   @override
-  List<Object> get props => [
+  List<Object?> get props => [
         status,
         _bluetoothDevices,
         bluetoothDevice,
         _wifiNetworks,
         wifiNetwork,
         wifiProvisioned,
-        timedOut,
+        errorCode,
+        errorDetails,
         errorMsg,
         failure
       ];

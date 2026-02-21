@@ -1,6 +1,4 @@
-import 'package:esp_provisioning_wifi/esp_provisioning_bloc.dart';
-import 'package:esp_provisioning_wifi/esp_provisioning_event.dart';
-import 'package:esp_provisioning_wifi/esp_provisioning_state.dart';
+import 'package:esp_provisioning_wifi/esp_provisioning_wifi.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -42,8 +40,79 @@ class _MyAppViewState extends State<MyAppView> {
 
   void pushFeedback(String msg) {
     setState(() {
-      feedbackMessage = '$feedbackMessage\n$msg';
+      feedbackMessage =
+          feedbackMessage.isEmpty ? msg : '$feedbackMessage\n$msg';
     });
+  }
+
+  String _statusLabel(EspProvisioningStatus status) {
+    switch (status) {
+      case EspProvisioningStatus.initial:
+        return 'initial';
+      case EspProvisioningStatus.bleScanned:
+        return 'bleScanned';
+      case EspProvisioningStatus.deviceChosen:
+        return 'deviceChosen';
+      case EspProvisioningStatus.wifiScanned:
+        return 'wifiScanned';
+      case EspProvisioningStatus.networkChosen:
+        return 'networkChosen';
+      case EspProvisioningStatus.wifiProvisioned:
+        return 'wifiProvisioned';
+      case EspProvisioningStatus.error:
+        return 'error';
+    }
+  }
+
+  String _failureLabel(EspProvisioningFailure failure) {
+    switch (failure) {
+      case EspProvisioningFailure.none:
+        return 'none';
+      case EspProvisioningFailure.permissionDenied:
+        return 'permissionDenied';
+      case EspProvisioningFailure.timeout:
+        return 'timeout';
+      case EspProvisioningFailure.cancelled:
+        return 'cancelled';
+      case EspProvisioningFailure.deviceNotFound:
+        return 'deviceNotFound';
+      case EspProvisioningFailure.invalidResponse:
+        return 'invalidResponse';
+      case EspProvisioningFailure.platform:
+        return 'platform';
+      case EspProvisioningFailure.unknown:
+        return 'unknown';
+    }
+  }
+
+  void _onStateChanged(EspProvisioningState state) {
+    switch (state.status) {
+      case EspProvisioningStatus.bleScanned:
+        pushFeedback(
+          'BLE scan complete: ${state.bluetoothDevices.length} device(s)',
+        );
+        break;
+      case EspProvisioningStatus.wifiScanned:
+        pushFeedback(
+          'Wi-Fi scan complete: ${state.wifiNetworks.length} network(s)',
+        );
+        break;
+      case EspProvisioningStatus.wifiProvisioned:
+        pushFeedback(
+          state.wifiProvisioned
+              ? 'Wi-Fi provisioned successfully'
+              : 'Wi-Fi provisioning failed',
+        );
+        break;
+      case EspProvisioningStatus.error:
+        final details = state.errorMsg.isEmpty ? 'No details' : state.errorMsg;
+        pushFeedback('Error (${_failureLabel(state.failure)}): $details');
+        break;
+      case EspProvisioningStatus.initial:
+      case EspProvisioningStatus.deviceChosen:
+      case EspProvisioningStatus.networkChosen:
+        break;
+    }
   }
 
   @override
@@ -56,7 +125,12 @@ class _MyAppViewState extends State<MyAppView> {
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<EspProvisioningBloc, EspProvisioningState>(
+    return BlocConsumer<EspProvisioningBloc, EspProvisioningState>(
+      listenWhen: (previous, current) =>
+          previous.status != current.status ||
+          previous.failure != current.failure ||
+          previous.errorMsg != current.errorMsg,
+      listener: (_, state) => _onStateChanged(state),
       builder: (context, state) {
         return Scaffold(
           appBar: AppBar(
@@ -68,7 +142,15 @@ class _MyAppViewState extends State<MyAppView> {
                   context
                       .read<EspProvisioningBloc>()
                       .add(EspProvisioningEventStart(prefixController.text));
-                  pushFeedback('Scanning BLE devices');
+                  pushFeedback('Scanning BLE devices...');
+                },
+              ),
+              IconButton(
+                icon: const Icon(Icons.clear_all),
+                onPressed: () {
+                  setState(() {
+                    feedbackMessage = '';
+                  });
                 },
               ),
             ],
@@ -94,6 +176,29 @@ class _MyAppViewState extends State<MyAppView> {
                 mainAxisAlignment: MainAxisAlignment.start,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  Card(
+                    child: Padding(
+                      padding: EdgeInsets.all(defaultPadding),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Status: ${_statusLabel(state.status)}',
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 6),
+                          Text('Failure: ${_failureLabel(state.failure)}'),
+                          if (state.errorMsg.isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            Text(
+                              state.errorMsg,
+                              style: const TextStyle(color: Colors.red),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
                   Flexible(
                     child: Padding(
                       padding: EdgeInsets.all(defaultPadding),
@@ -133,15 +238,15 @@ class _MyAppViewState extends State<MyAppView> {
                             ),
                           ),
                           onTap: () {
-                            final String bluetoothDevice =
-                                state.bluetoothDevices[i];
+                            final bluetoothDevice = state.bluetoothDevices[i];
                             context.read<EspProvisioningBloc>().add(
                                   EspProvisioningEventBleSelected(
                                     bluetoothDevice,
                                     proofOfPossessionController.text,
                                   ),
                                 );
-                            pushFeedback('Scanning WiFi on $bluetoothDevice');
+                            pushFeedback(
+                                'Scanning Wi-Fi on $bluetoothDevice...');
                           },
                         );
                       },
@@ -186,7 +291,7 @@ class _MyAppViewState extends State<MyAppView> {
                             ),
                           ),
                           onTap: () {
-                            final String wifiNetwork = state.wifiNetworks[i];
+                            final wifiNetwork = state.wifiNetworks[i];
                             context.read<EspProvisioningBloc>().add(
                                   EspProvisioningEventWifiSelected(
                                     state.bluetoothDevice,
@@ -196,7 +301,7 @@ class _MyAppViewState extends State<MyAppView> {
                                   ),
                                 );
                             pushFeedback(
-                              'Provisioning WiFi $wifiNetwork on ${state.bluetoothDevice}',
+                              'Provisioning $wifiNetwork on ${state.bluetoothDevice}...',
                             );
                           },
                         );

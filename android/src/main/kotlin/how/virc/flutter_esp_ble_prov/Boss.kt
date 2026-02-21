@@ -23,13 +23,11 @@ import org.greenrobot.eventbus.ThreadMode
  * Everything is asynchronous here, and this class handles that through manager classes.
  */
 class Boss {
-  private val logTag = "FlutterEspBleProv"
+  companion object {
+    const val DEFAULT_CONNECT_TIMEOUT_MS = 15000L
+  }
 
-  // Method names as called from Flutter across the channel.
-  private val scanBleMethod = "scanBleDevices"
-  private val scanWifiMethod = "scanWifiNetworks"
-  private val provisionWifiMethod = "provisionWifi"
-  private val platformVersionMethod = "getPlatformVersion"
+  private val logTag = "FlutterEspBleProv"
 
   /**
    * The available scanned BLE devices.
@@ -50,6 +48,9 @@ class Boss {
   private lateinit var platformContext: Context
   lateinit var platformActivity: Activity
 
+  @Volatile private var currentOperationToken = 0
+  @Volatile private var activeDevice: ESPDevice? = null
+
   val espManager: ESPProvisionManager
     get() = ESPProvisionManager.getInstance(platformContext)
 
@@ -62,42 +63,91 @@ class Boss {
 
   fun hasAttachedActivity(): Boolean = this::platformActivity.isInitialized
 
+  @Synchronized
+  fun startOperation(): Int {
+    currentOperationToken += 1
+    disconnectActiveDeviceLocked()
+    return currentOperationToken
+  }
+
+  @Synchronized
+  fun cancelOperations(): Boolean {
+    currentOperationToken += 1
+    disconnectActiveDeviceLocked()
+    return true
+  }
+
+  @Synchronized
+  fun isOperationActive(token: Int): Boolean = token == currentOperationToken
+
+  @Synchronized
+  private fun trackActiveDevice(device: ESPDevice) {
+    activeDevice = device
+  }
+
+  @Synchronized
+  fun clearActiveDevice(device: ESPDevice?) {
+    if (device == null || activeDevice === device) {
+      activeDevice = null
+    }
+  }
+
+  @Synchronized
+  private fun disconnectActiveDeviceLocked() {
+    try {
+      activeDevice?.disconnectDevice()
+    } catch (e: Exception) {
+      e("disconnectActiveDevice failed: $e")
+    } finally {
+      activeDevice = null
+    }
+  }
+
   /**
    * Connect to a named device with proofOfPossession string, and once connected, execute callback.
    */
   fun connect(
       conn: BleConnector,
       proofOfPossession: String,
+      operationToken: Int,
+      connectTimeoutMs: Long,
       onConnectCallback: (ESPDevice) -> Unit,
       onErrorCallback: (String, String, String?) -> Unit
   ) {
     val esp = espManager.createESPDevice(
         ESPConstants.TransportType.TRANSPORT_BLE,
         ESPConstants.SecurityType.SECURITY_1)
+    trackActiveDevice(esp)
     val mainHandler = Handler(Looper.getMainLooper())
     val bus = EventBus.getDefault()
     var resolved = false
     var unregisterTarget: Any? = null
+    var timeoutRunnable = Runnable {}
 
     fun resolveConnectError(code: String, message: String, details: String?) {
       if (resolved) {
         return
       }
       resolved = true
-      mainHandler.removeCallbacksAndMessages(null)
+      mainHandler.removeCallbacks(timeoutRunnable)
       unregisterTarget?.let {
         if (bus.isRegistered(it)) {
           bus.unregister(it)
         }
       }
+      if (!isOperationActive(operationToken)) {
+        clearActiveDevice(esp)
+        return
+      }
+      clearActiveDevice(esp)
       onErrorCallback(code, message, details)
     }
 
-    val timeoutRunnable = Runnable {
+    timeoutRunnable = Runnable {
       resolveConnectError(
-          "E_CONNECT_TIMEOUT",
+          ErrorCodes.CONNECT_TIMEOUT,
           "Connection timed out",
-          "ESP device did not report a successful BLE connection within timeout")
+          "ESP device did not report a successful BLE connection within $connectTimeoutMs ms")
     }
 
     val eventSubscriber = object {
@@ -114,6 +164,16 @@ class Boss {
             if (bus.isRegistered(this)) {
               bus.unregister(this)
             }
+            if (!isOperationActive(operationToken)) {
+              try {
+                esp.disconnectDevice()
+              } catch (e: Exception) {
+                e("disconnect cancelled connection failed: $e")
+              } finally {
+                clearActiveDevice(esp)
+              }
+              return
+            }
             esp.proofOfPossession = proofOfPossession
             onConnectCallback(esp)
           }
@@ -123,33 +183,44 @@ class Boss {
 
     unregisterTarget = eventSubscriber
     bus.register(eventSubscriber)
-    mainHandler.postDelayed(timeoutRunnable, 15000)
+    mainHandler.postDelayed(timeoutRunnable, connectTimeoutMs)
+
+    if (!isOperationActive(operationToken)) {
+      resolveConnectError(ErrorCodes.CANCELLED, "Operation cancelled", null)
+      return
+    }
 
     try {
       esp.connectBLEDevice(conn.device, conn.primaryServiceUuid)
     } catch (e: Exception) {
-      resolveConnectError("E_CONNECT", "Failed to start BLE connection", "Exception details $e")
+      resolveConnectError(
+          ErrorCodes.CONNECT_FAILED,
+          "Failed to start BLE connection",
+          "Exception details $e")
     }
   }
 
   fun call(call: MethodCall, result: Result) {
-    if (call.method == platformVersionMethod) {
+    if (call.method == MethodNames.GET_PLATFORM_VERSION) {
       val ctx = CallContext(call, result)
       getPlatformVersion(ctx)
+      return
+    }
+    if (call.method == MethodNames.CANCEL_OPERATIONS) {
+      result.success(cancelOperations())
       return
     }
 
     permissionManager.ensure { granted ->
       if (!granted) {
-        result.error("E_PERMISSION", "Bluetooth permissions not granted", null)
+        result.error(ErrorCodes.PERMISSION_DENIED, "Bluetooth permissions not granted", null)
         return@ensure
       }
       val ctx = CallContext(call, result)
       when (call.method) {
-        platformVersionMethod -> getPlatformVersion(ctx)
-        scanBleMethod -> bleScanner.call(ctx)
-        scanWifiMethod -> wifiScanner.call(ctx)
-        provisionWifiMethod -> wifiProvisioner.call(ctx)
+        MethodNames.SCAN_BLE_DEVICES -> bleScanner.call(ctx)
+        MethodNames.SCAN_WIFI_NETWORKS -> wifiScanner.call(ctx)
+        MethodNames.PROVISION_WIFI -> wifiProvisioner.call(ctx)
         else -> result.notImplemented()
       }
     }

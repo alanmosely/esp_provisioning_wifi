@@ -1,10 +1,8 @@
 import 'dart:async';
 
 import 'package:bloc_test/bloc_test.dart';
-import 'package:esp_provisioning_wifi/esp_provisioning_bloc.dart';
-import 'package:esp_provisioning_wifi/esp_provisioning_event.dart';
-import 'package:esp_provisioning_wifi/esp_provisioning_state.dart';
-import 'package:esp_provisioning_wifi/src/flutter_esp_ble_prov/flutter_esp_ble_prov.dart';
+import 'package:esp_provisioning_wifi/esp_provisioning_wifi.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class FakeProvisioningService extends FlutterEspBleProv {
@@ -35,6 +33,7 @@ class FakeProvisioningService extends FlutterEspBleProv {
   int scanBleDevicesCalls = 0;
   int scanWifiNetworksCalls = 0;
   int provisionWifiCalls = 0;
+  int cancelOperationsCalls = 0;
 
   @override
   Future<List<String>> scanBleDevices(String prefix) {
@@ -47,7 +46,10 @@ class FakeProvisioningService extends FlutterEspBleProv {
 
   @override
   Future<List<String>> scanWifiNetworks(
-      String deviceName, String proofOfPossession) {
+    String deviceName,
+    String proofOfPossession, {
+    Duration? connectTimeout,
+  }) {
     scanWifiNetworksCalls++;
     if (_scanWifiNetworksHandler == null) {
       return Future<List<String>>.value(const <String>[]);
@@ -56,8 +58,13 @@ class FakeProvisioningService extends FlutterEspBleProv {
   }
 
   @override
-  Future<bool> provisionWifi(String deviceName, String proofOfPossession,
-      String ssid, String passphrase) {
+  Future<bool> provisionWifi(
+    String deviceName,
+    String proofOfPossession,
+    String ssid,
+    String passphrase, {
+    Duration? connectTimeout,
+  }) {
     provisionWifiCalls++;
     if (_provisionWifiHandler == null) {
       return Future<bool>.value(false);
@@ -68,6 +75,12 @@ class FakeProvisioningService extends FlutterEspBleProv {
       ssid,
       passphrase,
     );
+  }
+
+  @override
+  Future<bool> cancelOperations() {
+    cancelOperationsCalls++;
+    return Future<bool>.value(true);
   }
 }
 
@@ -83,6 +96,7 @@ void main() {
     expect: () => <EspProvisioningState>[
       EspProvisioningState(
         status: EspProvisioningStatus.error,
+        errorCode: EspProvisioningErrorCodes.permission,
         errorMsg: 'Bluetooth permission not granted',
         failure: EspProvisioningFailure.permissionDenied,
       ),
@@ -131,7 +145,8 @@ void main() {
         status: EspProvisioningStatus.wifiScanned,
         bluetoothDevice: 'PROV_1',
         wifiNetworks: const <String>[],
-        timedOut: true,
+        errorCode: EspProvisioningErrorCodes.timeout,
+        errorDetails: 'scanWifiNetworks timeout after 0:00:00.010000',
         errorMsg: 'WiFi scan timed out',
         failure: EspProvisioningFailure.timeout,
       ),
@@ -187,8 +202,40 @@ void main() {
       EspProvisioningState(
         status: EspProvisioningStatus.error,
         bluetoothDevice: 'PROV_1',
+        errorCode: EspProvisioningErrorCodes.unknown,
         errorMsg: 'Exception: scan failed',
         failure: EspProvisioningFailure.unknown,
+      ),
+    ],
+  );
+
+  blocTest<EspProvisioningBloc, EspProvisioningState>(
+    'emits cancelled failure for cancelled platform operations',
+    build: () => EspProvisioningBloc(
+      provisioningService: FakeProvisioningService(
+        scanWifiNetworksHandler: (_, __) => Future<List<String>>.error(
+          PlatformException(
+            code: EspProvisioningErrorCodes.cancelled,
+            message: 'Operation cancelled',
+          ),
+        ),
+      ),
+      bluetoothPermissionRequest: () async => true,
+      requestTimeout: const Duration(milliseconds: 10),
+    ),
+    act: (bloc) =>
+        bloc.add(const EspProvisioningEventBleSelected('PROV_1', 'abcd1234')),
+    expect: () => <EspProvisioningState>[
+      EspProvisioningState(
+        status: EspProvisioningStatus.deviceChosen,
+        bluetoothDevice: 'PROV_1',
+      ),
+      EspProvisioningState(
+        status: EspProvisioningStatus.error,
+        bluetoothDevice: 'PROV_1',
+        errorCode: EspProvisioningErrorCodes.cancelled,
+        errorMsg: 'Operation cancelled',
+        failure: EspProvisioningFailure.cancelled,
       ),
     ],
   );

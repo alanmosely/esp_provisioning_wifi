@@ -1,34 +1,21 @@
-// ignore_for_file: inference_failure_on_function_invocation
-
-import 'package:bloc_test/bloc_test.dart';
-import 'package:esp_provisioning_wifi/esp_provisioning_bloc.dart';
-import 'package:esp_provisioning_wifi/esp_provisioning_event.dart';
 import 'package:esp_provisioning_wifi/esp_provisioning_state.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  group('EspProvisioningBloc', () {
-    late EspProvisioningBloc espProvisioningBloc;
+  group('EspProvisioningState', () {
+    test('has expected default values', () {
+      final state = EspProvisioningState();
 
-    WidgetsFlutterBinding.ensureInitialized();
-
-    setUp(() {
-      espProvisioningBloc = EspProvisioningBloc();
-    });
-
-    test('check initial state', () {
-      expect(
-          espProvisioningBloc.state,
-          EspProvisioningState(
-            status: EspProvisioningStatus.initial,
-            bluetoothDevices: const <String>[],
-            bluetoothDevice: "",
-            wifiNetworks: const <String>[],
-            wifiNetwork: "",
-            wifiProvisioned: false,
-            errorMsg: "",
-          ));
+      expect(state.status, EspProvisioningStatus.initial);
+      expect(state.bluetoothDevices, isEmpty);
+      expect(state.bluetoothDevice, '');
+      expect(state.wifiNetworks, isEmpty);
+      expect(state.wifiNetwork, '');
+      expect(state.wifiProvisioned, isFalse);
+      expect(state.errorCode, isNull);
+      expect(state.errorDetails, isNull);
+      expect(state.errorMsg, '');
+      expect(state.failure, EspProvisioningFailure.none);
     });
 
     test('defensively copies list inputs', () {
@@ -49,26 +36,41 @@ void main() {
       expect(() => state.wifiNetworks.add('ssid-3'), throwsUnsupportedError);
     });
 
-    blocTest(
-      'emits EspProvisioningStatus.deviceChosen and error when EspProvisioningEventBleSelected is added',
-      build: () => espProvisioningBloc,
-      act: (bloc) =>
-          bloc.add(const EspProvisioningEventBleSelected("device", "prefix")),
-      expect: () => [
-        EspProvisioningState(
-            status: EspProvisioningStatus.deviceChosen,
-            bluetoothDevice: "device")
-      ],
-    );
-    blocTest(
-      'emits EspProvisioningStatus.networkChosen and error when EspProvisioningEventWifiSelected is added',
-      build: () => espProvisioningBloc,
-      act: (bloc) => bloc.add(const EspProvisioningEventWifiSelected(
-          "device", "pop", "ssid", "password")),
-      expect: () => [
-        EspProvisioningState(
-            status: EspProvisioningStatus.networkChosen, wifiNetwork: "ssid")
-      ],
-    );
+    test('copyWith updates selected fields while preserving others', () {
+      final original = EspProvisioningState(
+        status: EspProvisioningStatus.deviceChosen,
+        bluetoothDevices: const <String>['PROV_1'],
+        bluetoothDevice: 'PROV_1',
+      );
+
+      final next = original.copyWith(
+        status: EspProvisioningStatus.error,
+        errorMsg: 'Something failed',
+        failure: EspProvisioningFailure.platform,
+      );
+
+      expect(next.status, EspProvisioningStatus.error);
+      expect(next.errorMsg, 'Something failed');
+      expect(next.failure, EspProvisioningFailure.platform);
+      expect(next.bluetoothDevices, const <String>['PROV_1']);
+      expect(next.bluetoothDevice, 'PROV_1');
+    });
+
+    test('copyWith can explicitly clear nullable error fields', () {
+      final original = EspProvisioningState(
+        errorCode: 'E1',
+        errorDetails: 'details',
+        errorMsg: 'failed',
+      );
+
+      final next = original.copyWith(
+        errorCode: null,
+        errorDetails: null,
+      );
+
+      expect(next.errorCode, isNull);
+      expect(next.errorDetails, isNull);
+      expect(next.errorMsg, 'failed');
+    });
   });
 }

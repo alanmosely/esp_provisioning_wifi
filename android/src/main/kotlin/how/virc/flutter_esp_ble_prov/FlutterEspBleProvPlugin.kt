@@ -24,7 +24,7 @@ class FlutterEspBleProvPlugin :
 
   override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
     Log.d(logTag, "onAttachedToEngine: $binding")
-    channel = MethodChannel(binding.binaryMessenger, "flutter_esp_ble_prov")
+    channel = MethodChannel(binding.binaryMessenger, MethodNames.CHANNEL)
     channel.setMethodCallHandler(this)
     boss.attachContext(binding.applicationContext)
   }
