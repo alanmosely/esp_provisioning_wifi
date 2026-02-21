@@ -14,15 +14,28 @@ import 'esp_provisioning_state.dart';
 /// EspProvisioningStates
 class EspProvisioningBloc
     extends Bloc<EspProvisioningEvent, EspProvisioningState> {
-  EspProvisioningBloc() : super(const EspProvisioningState()) {
+  EspProvisioningBloc({
+    FlutterEspBleProv? provisioningService,
+    Future<bool> Function()? bluetoothPermissionRequest,
+    Duration? requestTimeout,
+  })  : espProvisioningService =
+            provisioningService ?? EspProvisioningService(),
+        _bluetoothPermissionRequest = bluetoothPermissionRequest,
+        _requestTimeout = requestTimeout ?? const Duration(seconds: TIMEOUT),
+        super(const EspProvisioningState()) {
     on<EspProvisioningEventStart>(_onStart);
     on<EspProvisioningEventBleSelected>(_onBleSelected);
     on<EspProvisioningEventWifiSelected>(_onWifiSelected);
   }
 
-  /// A late final variable that is assigned to the instance of the EspProvisioningService class.
-  late final FlutterEspBleProv espProvisioningService =
-      EspProvisioningService();
+  /// A provisioner service used to communicate with the platform plugin.
+  final FlutterEspBleProv espProvisioningService;
+
+  /// Override for tests where permission_handler is unavailable.
+  final Future<bool> Function()? _bluetoothPermissionRequest;
+
+  /// Timeout to apply to scan/provision calls.
+  final Duration _requestTimeout;
 
   /// A boolean variable that is used to check if bluetooth permission has been granted
   bool bluetoothIsGranted = false;
@@ -37,14 +50,17 @@ class EspProvisioningBloc
     Emitter<EspProvisioningState> emit,
   ) async {
     try {
-      await requestBluetoothPermission();
+      if (_bluetoothPermissionRequest != null) {
+        bluetoothIsGranted = await _bluetoothPermissionRequest!();
+      } else {
+        await requestBluetoothPermission();
+      }
       if (bluetoothIsGranted) {
         emit(state.copyWith(status: EspProvisioningStatus.initial));
 
         final scannedDevices = await espProvisioningService
             .scanBleDevices(event.bluetoothDevicePrefix)
-            .timeout(const Duration(seconds: TIMEOUT),
-                onTimeout: () => List.empty());
+            .timeout(_requestTimeout, onTimeout: () => List.empty());
 
         emit(state.copyWith(
           status: EspProvisioningStatus.bleScanned,
@@ -95,7 +111,7 @@ class EspProvisioningBloc
       var scannedNetworks = <String>[];
       scannedNetworks = await espProvisioningService
           .scanWifiNetworks(event.bluetoothDevice, event.proofOfPossession)
-          .timeout(const Duration(seconds: TIMEOUT), onTimeout: () {
+          .timeout(_requestTimeout, onTimeout: () {
         timedOut = true;
         return List.empty();
       });
@@ -133,13 +149,18 @@ class EspProvisioningBloc
           timedOut: timedOut,
         ),
       );
-      wifiProvisioned = (await espProvisioningService
+      final provisionFuture = espProvisioningService
           .provisionWifi(event.bluetoothDevice, event.proofOfPossession,
               event.wifiNetwork, event.password)
-          .timeout(const Duration(seconds: TIMEOUT), onTimeout: () {
-        timedOut = true;
-        return false;
-      }))!;
+          .then<bool?>((value) => value);
+      wifiProvisioned = (await provisionFuture.timeout(
+            _requestTimeout,
+            onTimeout: () {
+              timedOut = true;
+              return false;
+            },
+          )) ??
+          false;
       emit(state.copyWith(
         status: EspProvisioningStatus.wifiProvisioned,
         wifiProvisioned: wifiProvisioned,
@@ -154,6 +175,7 @@ class EspProvisioningBloc
   /// requestBluetoothPermission() is a function that requests bluetooth permission from the user
   /// using the permission_handler package
   Future<void> requestBluetoothPermission() async {
+    bluetoothIsGranted = false;
     if (Platform.isAndroid) {
       Map<Permission, PermissionStatus> status = await [
         Permission.bluetoothScan,

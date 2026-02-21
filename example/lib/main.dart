@@ -2,7 +2,6 @@ import 'package:esp_provisioning_wifi/esp_provisioning_bloc.dart';
 import 'package:esp_provisioning_wifi/esp_provisioning_event.dart';
 import 'package:esp_provisioning_wifi/esp_provisioning_state.dart';
 import 'package:flutter/material.dart';
-
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 void main() {
@@ -14,9 +13,11 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (_) => EspProvisioningBloc(),
-      child: const MyAppView(),
+    return MaterialApp(
+      home: BlocProvider(
+        create: (_) => EspProvisioningBloc(),
+        child: const MyAppView(),
+      ),
     );
   }
 }
@@ -29,38 +30,47 @@ class MyAppView extends StatefulWidget {
 }
 
 class _MyAppViewState extends State<MyAppView> {
-  final defaultPadding = 12.0;
-  final defaultDevicePrefix = 'PROV';
+  final double defaultPadding = 12.0;
 
   String feedbackMessage = '';
 
-  final prefixController = TextEditingController(text: 'PROV_');
-  final proofOfPossessionController = TextEditingController(text: 'abcd1234');
-  final passphraseController = TextEditingController();
+  final TextEditingController prefixController =
+      TextEditingController(text: 'PROV_');
+  final TextEditingController proofOfPossessionController =
+      TextEditingController(text: 'abcd1234');
+  final TextEditingController passphraseController = TextEditingController();
 
-  pushFeedback(String msg) {
+  void pushFeedback(String msg) {
     setState(() {
       feedbackMessage = '$feedbackMessage\n$msg';
     });
   }
 
   @override
+  void dispose() {
+    prefixController.dispose();
+    proofOfPossessionController.dispose();
+    passphraseController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return BlocBuilder<EspProvisioningBloc, EspProvisioningState>(
-        builder: (context, state) {
-      return MaterialApp(
-        home: Scaffold(
+      builder: (context, state) {
+        return Scaffold(
           appBar: AppBar(
             title: const Text('ESP BLE Provisioning Example'),
             actions: [
               IconButton(
-                  icon: const Icon(Icons.bluetooth),
-                  onPressed: () {
-                    context
-                        .read<EspProvisioningBloc>()
-                        .add(EspProvisioningEventStart(prefixController.text));
-                    pushFeedback('Scanning BLE devices');
-                  }),
+                icon: const Icon(Icons.bluetooth),
+                onPressed: () {
+                  context
+                      .read<EspProvisioningBloc>()
+                      .add(EspProvisioningEventStart(prefixController.text));
+                  pushFeedback('Scanning BLE devices');
+                },
+              ),
             ],
           ),
           bottomSheet: SafeArea(
@@ -71,24 +81,23 @@ class _MyAppViewState extends State<MyAppView> {
               child: Text(
                 feedbackMessage,
                 style: TextStyle(
-                    fontWeight: FontWeight.bold, color: Colors.green.shade600),
+                  fontWeight: FontWeight.bold,
+                  color: Colors.green.shade600,
+                ),
               ),
             ),
           ),
           body: SafeArea(
-            child: Container(
+            child: Padding(
               padding: EdgeInsets.all(defaultPadding),
               child: Column(
-                mainAxisSize: MainAxisSize.max,
                 mainAxisAlignment: MainAxisAlignment.start,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Flexible(
-                    child: Container(
+                    child: Padding(
                       padding: EdgeInsets.all(defaultPadding),
                       child: Row(
-                        mainAxisSize: MainAxisSize.max,
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           const Flexible(
                             child: Text('Device Prefix'),
@@ -97,7 +106,8 @@ class _MyAppViewState extends State<MyAppView> {
                             child: TextField(
                               controller: prefixController,
                               decoration: const InputDecoration(
-                                  hintText: 'enter device prefix'),
+                                hintText: 'enter device prefix',
+                              ),
                             ),
                           ),
                         ],
@@ -105,7 +115,7 @@ class _MyAppViewState extends State<MyAppView> {
                     ),
                   ),
                   Flexible(
-                    child: Container(
+                    child: Padding(
                       padding: EdgeInsets.all(defaultPadding),
                       child: const Text('BLE devices'),
                     ),
@@ -123,10 +133,14 @@ class _MyAppViewState extends State<MyAppView> {
                             ),
                           ),
                           onTap: () {
-                            final bluetoothDevice = state.bluetoothDevices[i];
+                            final String bluetoothDevice =
+                                state.bluetoothDevices[i];
                             context.read<EspProvisioningBloc>().add(
-                                EspProvisioningEventBleSelected(bluetoothDevice,
-                                    proofOfPossessionController.text));
+                                  EspProvisioningEventBleSelected(
+                                    bluetoothDevice,
+                                    proofOfPossessionController.text,
+                                  ),
+                                );
                             pushFeedback('Scanning WiFi on $bluetoothDevice');
                           },
                         );
@@ -134,11 +148,9 @@ class _MyAppViewState extends State<MyAppView> {
                     ),
                   ),
                   Flexible(
-                    child: Container(
+                    child: Padding(
                       padding: EdgeInsets.all(defaultPadding),
                       child: Row(
-                        mainAxisSize: MainAxisSize.max,
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           const Flexible(
                             child: Text('Proof of possession'),
@@ -147,7 +159,8 @@ class _MyAppViewState extends State<MyAppView> {
                             child: TextField(
                               controller: proofOfPossessionController,
                               decoration: const InputDecoration(
-                                  hintText: 'enter proof of possession string'),
+                                hintText: 'enter proof of possession string',
+                              ),
                             ),
                           ),
                         ],
@@ -155,7 +168,7 @@ class _MyAppViewState extends State<MyAppView> {
                     ),
                   ),
                   Flexible(
-                    child: Container(
+                    child: Padding(
                       padding: EdgeInsets.all(defaultPadding),
                       child: const Text('WiFi networks'),
                     ),
@@ -172,27 +185,28 @@ class _MyAppViewState extends State<MyAppView> {
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                          onTap: () async {
-                            final wifiNetwork = state.wifiNetworks[i];
+                          onTap: () {
+                            final String wifiNetwork = state.wifiNetworks[i];
                             context.read<EspProvisioningBloc>().add(
-                                EspProvisioningEventWifiSelected(
+                                  EspProvisioningEventWifiSelected(
                                     state.bluetoothDevice,
                                     proofOfPossessionController.text,
                                     wifiNetwork,
-                                    passphraseController.text));
+                                    passphraseController.text,
+                                  ),
+                                );
                             pushFeedback(
-                                'Provisioning WiFi $wifiNetwork on ${state.bluetoothDevice}');
+                              'Provisioning WiFi $wifiNetwork on ${state.bluetoothDevice}',
+                            );
                           },
                         );
                       },
                     ),
                   ),
                   Flexible(
-                    child: Container(
+                    child: Padding(
                       padding: EdgeInsets.all(defaultPadding),
                       child: Row(
-                        mainAxisSize: MainAxisSize.max,
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           const Flexible(
                             child: Text('WiFi Passphrase'),
@@ -201,7 +215,8 @@ class _MyAppViewState extends State<MyAppView> {
                             child: TextField(
                               controller: passphraseController,
                               decoration: const InputDecoration(
-                                  hintText: 'enter passphrase'),
+                                hintText: 'enter passphrase',
+                              ),
                               obscureText: true,
                             ),
                           ),
@@ -213,8 +228,8 @@ class _MyAppViewState extends State<MyAppView> {
               ),
             ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
   }
 }

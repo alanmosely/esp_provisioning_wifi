@@ -3,6 +3,7 @@
 *.log
 *.pyc
 *.swp
+*.hprof
 .DS_Store
 .atom/
 .buildlog/
@@ -39,4 +40,3 @@ coverage/
 **/android/gradlew.bat
 **/android/local.properties
 **/android/**/GeneratedPluginRegistrant.java
-

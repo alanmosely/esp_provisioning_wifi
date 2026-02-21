@@ -4,14 +4,15 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'esp_provisioning_wifi'
-  s.version          = '0.0.5'
-  s.summary          = 'A new Flutter plugin project.'
+  s.version          = '0.0.7'
+  s.summary          = 'Provision ESP32 WiFi over BLE from Flutter.'
   s.description      = <<-DESC
-A new Flutter plugin project.
+Flutter plugin and BLoC wrapper for provisioning ESP32 devices over BLE
+using Espressif provisioning libraries.
                        DESC
-  s.homepage         = 'http://example.com'
+  s.homepage         = 'https://github.com/alanmosely/esp_provisioning_wifi'
   s.license          = { :file => '../LICENSE' }
-  s.author           = { 'Your Company' => 'email@example.com' }
+  s.author           = { 'Alan Mosely' => 'alanmosely@users.noreply.github.com' }
   s.source           = { :path => '.' }
   s.source_files = 'Classes/**/*'
   s.dependency 'Flutter'

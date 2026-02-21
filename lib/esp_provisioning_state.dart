@@ -1,3 +1,5 @@
+import 'dart:collection';
+
 import 'package:equatable/equatable.dart';
 
 /// A list of all the possible states that the ESP provisioning can be in
@@ -16,23 +18,27 @@ enum EspProvisioningStatus {
 class EspProvisioningState extends Equatable {
   const EspProvisioningState({
     this.status = EspProvisioningStatus.initial,
-    this.bluetoothDevices = const <String>[],
+    List<String> bluetoothDevices = const <String>[],
     this.bluetoothDevice = "",
-    this.wifiNetworks = const <String>[],
+    List<String> wifiNetworks = const <String>[],
     this.wifiNetwork = "",
     this.wifiProvisioned = false,
     this.timedOut = false,
     this.errorMsg = "",
-  });
+  })  : _bluetoothDevices = bluetoothDevices,
+        _wifiNetworks = wifiNetworks;
 
   final EspProvisioningStatus status;
-  final List<String> bluetoothDevices;
+  final List<String> _bluetoothDevices;
   final String bluetoothDevice;
-  final List<String> wifiNetworks;
+  final List<String> _wifiNetworks;
   final String wifiNetwork;
   final bool wifiProvisioned;
   final bool timedOut;
   final String errorMsg;
+
+  List<String> get bluetoothDevices => UnmodifiableListView(_bluetoothDevices);
+  List<String> get wifiNetworks => UnmodifiableListView(_wifiNetworks);
 
   EspProvisioningState copyWith({
     EspProvisioningStatus? status,
@@ -46,9 +52,11 @@ class EspProvisioningState extends Equatable {
   }) {
     return EspProvisioningState(
       status: status ?? this.status,
-      bluetoothDevices: bluetoothDevices ?? this.bluetoothDevices,
+      bluetoothDevices: List.unmodifiable(
+          List<String>.of(bluetoothDevices ?? _bluetoothDevices)),
       bluetoothDevice: bluetoothDevice ?? this.bluetoothDevice,
-      wifiNetworks: wifiNetworks ?? this.wifiNetworks,
+      wifiNetworks:
+          List.unmodifiable(List<String>.of(wifiNetworks ?? _wifiNetworks)),
       wifiNetwork: wifiNetwork ?? this.wifiNetwork,
       wifiProvisioned: wifiProvisioned ?? this.wifiProvisioned,
       timedOut: timedOut ?? this.timedOut,
@@ -58,15 +66,15 @@ class EspProvisioningState extends Equatable {
 
   @override
   String toString() {
-    return '''EspProvisioningState { status: $status, bluetoothDevices: ${bluetoothDevices.length}, bluetoothDevice: $bluetoothDevice, wifiNetworks: ${wifiNetworks.length}, wifiNetwork: $wifiNetwork, wifiProvisioned: $wifiProvisioned, timedOut: $timedOut, errorMsg: $errorMsg''';
+    return 'EspProvisioningState { status: $status, bluetoothDevices: ${bluetoothDevices.length}, bluetoothDevice: $bluetoothDevice, wifiNetworks: ${wifiNetworks.length}, wifiNetwork: $wifiNetwork, wifiProvisioned: $wifiProvisioned, timedOut: $timedOut, errorMsg: $errorMsg }';
   }
 
   @override
   List<Object> get props => [
         status,
-        bluetoothDevices,
+        _bluetoothDevices,
         bluetoothDevice,
-        wifiNetworks,
+        _wifiNetworks,
         wifiNetwork,
         wifiProvisioned,
         timedOut,

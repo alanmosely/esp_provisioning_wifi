@@ -75,11 +75,9 @@ class CallContext(val call: MethodCall, val result: Result) {
  * The version switch is required because Bluetooth permission requirements changed at S (31).
  */
 class PermissionManager(val boss: Boss) : PluginRegistry.RequestPermissionsResultListener {
-
-  lateinit var callback: (Boolean) -> Unit
-
-  val callbacks = mutableMapOf<Int, (Boolean) -> Unit>()
-  var lastCallbackId = 0
+  private val requestCode = 7309
+  private var requestInFlight = false
+  private val pendingCallbacks = mutableListOf<(Boolean) -> Unit>()
 
   /**
    * Required permissions for the current version of the SDK.
@@ -98,28 +96,43 @@ class PermissionManager(val boss: Boss) : PluginRegistry.RequestPermissionsResul
    * Check permissions are granted and request them otherwise.
    */
   fun ensure(fCallback: (Boolean) -> Unit) {
-    callback = fCallback
+    if (!boss.hasAttachedActivity()) {
+      fCallback(false)
+      return
+    }
     val toRequest: MutableList<String> = mutableListOf()
     for (p in permissions) {
       if (ActivityCompat.checkSelfPermission(boss.platformActivity, p) != PackageManager.PERMISSION_GRANTED) {
         toRequest.add(p)
       }
     }
-    if (toRequest.size > 0) {
-      ActivityCompat.requestPermissions(boss.platformActivity, toRequest.toTypedArray(), 0)
-    } else {
+    if (toRequest.isEmpty()) {
       fCallback(true)
+      return
     }
+
+    pendingCallbacks.add(fCallback)
+    if (requestInFlight) {
+      return
+    }
+
+    requestInFlight = true
+    ActivityCompat.requestPermissions(boss.platformActivity, toRequest.toTypedArray(), requestCode)
   }
 
   /**
    * Called on permission request result.
    */
   override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray): Boolean {
-    boss.d("permission result")
-    if (this::callback.isInitialized) {
-      callback(true)
+    if (requestCode != this.requestCode) {
+      return false
     }
+    boss.d("permission result")
+    val granted = grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }
+    requestInFlight = false
+    val callbacks = pendingCallbacks.toList()
+    pendingCallbacks.clear()
+    callbacks.forEach { it(granted) }
     return true
   }
 }
@@ -176,30 +189,91 @@ class Boss {
     return devices[deviceName]
   }
 
+  fun hasAttachedActivity(): Boolean {
+    return this::platformActivity.isInitialized
+  }
+
   /**
    * Connect to a named device with proofOfPossession string, and once connected, execute the
    * callback.
    */
-  fun connect(conn: BleConnector, proofOfPossession: String, onConnectCallback: (ESPDevice) -> Unit) {
+  fun connect(
+      conn: BleConnector,
+      proofOfPossession: String,
+      onConnectCallback: (ESPDevice) -> Unit,
+      onErrorCallback: (String, String, String?) -> Unit
+  ) {
     val esp = espManager.createESPDevice(ESPConstants.TransportType.TRANSPORT_BLE, ESPConstants.SecurityType.SECURITY_1)
-    EventBus.getDefault().register(object {
+    val mainHandler = Handler(Looper.getMainLooper())
+    val bus = EventBus.getDefault()
+    var resolved = false
+    var unregisterTarget: Any? = null
+
+    fun resolveConnectError(code: String, message: String, details: String?) {
+      if (resolved) {
+        return
+      }
+      resolved = true
+      mainHandler.removeCallbacksAndMessages(null)
+      unregisterTarget?.let {
+        if (bus.isRegistered(it)) {
+          bus.unregister(it)
+        }
+      }
+      onErrorCallback(code, message, details)
+    }
+
+    val timeoutRunnable = Runnable {
+      resolveConnectError(
+          "E_CONNECT_TIMEOUT",
+          "Connection timed out",
+          "ESP device did not report a successful BLE connection within timeout"
+      )
+    }
+
+    val eventSubscriber = object {
       @Subscribe(threadMode = ThreadMode.MAIN)
       fun onEvent(event: DeviceConnectionEvent) {
+        if (resolved) {
+          return
+        }
         d("bus event $event ${event.eventType}")
         when (event.eventType) {
           ESPConstants.EVENT_DEVICE_CONNECTED -> {
-            EventBus.getDefault().unregister(this)
+            resolved = true
+            mainHandler.removeCallbacks(timeoutRunnable)
+            if (bus.isRegistered(this)) {
+              bus.unregister(this)
+            }
             esp.proofOfPossession = proofOfPossession
             onConnectCallback(esp)
           }
         }
       }
-    })
-    esp.connectBLEDevice(conn.device, conn.primaryServiceUuid)
+    }
+
+    unregisterTarget = eventSubscriber
+    bus.register(eventSubscriber)
+    mainHandler.postDelayed(timeoutRunnable, 15000)
+
+    try {
+      esp.connectBLEDevice(conn.device, conn.primaryServiceUuid)
+    } catch (e: Exception) {
+      resolveConnectError("E_CONNECT", "Failed to start BLE connection", "Exception details $e")
+    }
   }
 
   fun call(call: MethodCall, result: Result) {
-    permissionManager.ensure(fun(_: Boolean) {
+    if (call.method == platformVersionMethod) {
+      val ctx = CallContext(call, result)
+      getPlatformVersion(ctx)
+      return
+    }
+    permissionManager.ensure(fun(granted: Boolean) {
+      if (!granted) {
+        result.error("E_PERMISSION", "Bluetooth permissions not granted", null)
+        return
+      }
       val ctx = CallContext(call, result)
       when (call.method) {
         platformVersionMethod -> getPlatformVersion(ctx)
@@ -239,25 +313,44 @@ class BleScanManager(boss: Boss) : ActionManager(boss) {
   override fun call(ctx: CallContext) {
     boss.d("searchBleEspDevices: start")
     val prefix = ctx.arg("prefix") ?: return
+    boss.devices.clear()
+    var resolved = false
+    fun resolveError(code: String, message: String, details: String?) {
+      if (resolved) {
+        return
+      }
+      resolved = true
+      ctx.result.error(code, message, details)
+    }
+    fun resolveSuccess(devices: List<String>) {
+      if (resolved) {
+        return
+      }
+      resolved = true
+      ctx.result.success(ArrayList<String>(devices))
+    }
 
     boss.espManager.searchBleEspDevices(prefix, object : BleScanListener {
       override fun scanStartFailed() {
-        TODO("Not yet implemented")
+        boss.e("searchBleEspDevices: scanStartFailed")
+        resolveError("E_BLE_SCAN_START", "BLE scan failed to start", "Espressif BLE scan could not be started")
       }
 
       override fun onPeripheralFound(device: BluetoothDevice?, scanResult: ScanResult?) {
         device ?: return
         scanResult ?: return
-        boss.devices.put(device.name, BleConnector(device, scanResult))
+        val name = device.name ?: device.address
+        boss.devices[name] = BleConnector(device, scanResult)
       }
 
       override fun scanCompleted() {
-        ctx.result.success(ArrayList<String>(boss.devices.keys))
+        resolveSuccess(boss.devices.keys.toList())
         boss.d("searchBleEspDevices: scanComplete")
       }
 
       override fun onFailure(e: java.lang.Exception?) {
-        TODO("Not yet implemented")
+        boss.e("searchBleEspDevices: onFailure $e")
+        resolveError("E_BLE_SCAN", "BLE scan failed", "Exception details $e")
       }
 
     })
@@ -269,28 +362,54 @@ class WifiScanManager(boss: Boss) : ActionManager(boss) {
   override fun call(ctx: CallContext) {
     val name = ctx.arg("deviceName") ?: return
     val proofOfPossession = ctx.arg("proofOfPossession") ?: return
-    val conn = boss.connector(name) ?: return
+    val conn = boss.connector(name)
+    if (conn == null) {
+      ctx.result.error("E_DEVICE_NOT_FOUND", "WiFi scan failed", "No scanned BLE device named $name")
+      return
+    }
+    boss.networks.clear()
     boss.d("esp connect: start")
-    boss.connect(conn, proofOfPossession) { esp ->
+    var resolved = false
+    fun resolveError(code: String, message: String, details: String?) {
+      if (resolved) {
+        return
+      }
+      resolved = true
+      ctx.result.error(code, message, details)
+    }
+    fun resolveSuccess(networks: List<String>) {
+      if (resolved) {
+        return
+      }
+      resolved = true
+      Handler(Looper.getMainLooper()).post {
+        ctx.result.success(ArrayList<String>(networks))
+      }
+    }
+    boss.connect(
+        conn,
+        proofOfPossession,
+        { esp ->
       boss.d("scanNetworks: start")
       esp.scanNetworks(object : WiFiScanListener {
         override fun onWifiListReceived(wifiList: ArrayList<WiFiAccessPoint>?) {
-          wifiList ?: return
-          wifiList.forEach { boss.networks.add(it.wifiName) }
+          wifiList?.forEach { boss.networks.add(it.wifiName) }
           boss.d("scanNetworks: complete ${boss.networks}")
-          Handler(Looper.getMainLooper()).post {
-            ctx.result.success(ArrayList<String>(boss.networks))
-          }
-          boss.d("scanNetworks: complete 2 ${boss.networks}")
+          resolveSuccess(boss.networks.toList())
           esp.disconnectDevice()
         }
 
         override fun onWiFiScanFailed(e: java.lang.Exception?) {
           boss.e("scanNetworks: error $e")
-          ctx.result.error("E1", "WiFi scan failed", "Exception details $e")
+          resolveError("E1", "WiFi scan failed", "Exception details $e")
+          esp.disconnectDevice()
         }
       })
-    }
+    },
+        { code, message, details ->
+          resolveError(code, message, details)
+        }
+    )
   }
 }
 
@@ -302,13 +421,38 @@ class WifiProvisionManager(boss: Boss) : ActionManager(boss) {
     val passphrase = ctx.arg("passphrase") ?: return
     val deviceName = ctx.arg("deviceName") ?: return
     val proofOfPossession = ctx.arg("proofOfPossession") ?: return
-    val conn = boss.connector(deviceName) ?: return
+    val conn = boss.connector(deviceName)
+    if (conn == null) {
+      ctx.result.error("E_DEVICE_NOT_FOUND", "WiFi provisioning failed", "No scanned BLE device named $deviceName")
+      return
+    }
 
-    boss.connect(conn, proofOfPossession) { esp ->
+    var resolved = false
+    fun resolve(success: Boolean) {
+      if (resolved) {
+        return
+      }
+      resolved = true
+      ctx.result.success(success)
+    }
+    fun resolveError(code: String, message: String, details: String?) {
+      if (resolved) {
+        return
+      }
+      resolved = true
+      ctx.result.error(code, message, details)
+    }
+
+    boss.connect(
+        conn,
+        proofOfPossession,
+        { esp ->
       boss.d("provision: start")
       esp.provision(ssid, passphrase, object : ProvisionListener {
         override fun createSessionFailed(e: java.lang.Exception?) {
-          boss.e("wifiprovision createSessionFailed")
+          boss.e("wifiprovision createSessionFailed $e")
+          resolve(false)
+          esp.disconnectDevice()
         }
 
         override fun wifiConfigSent() {
@@ -317,7 +461,8 @@ class WifiProvisionManager(boss: Boss) : ActionManager(boss) {
 
         override fun wifiConfigFailed(e: java.lang.Exception?) {
           boss.e("wifiConfiFailed $e")
-          ctx.result.success(false)
+          resolve(false)
+          esp.disconnectDevice()
         }
 
         override fun wifiConfigApplied() {
@@ -326,26 +471,34 @@ class WifiProvisionManager(boss: Boss) : ActionManager(boss) {
 
         override fun wifiConfigApplyFailed(e: java.lang.Exception?) {
           boss.e("wifiConfigApplyFailed $e")
-          ctx.result.success(false)
+          resolve(false)
+          esp.disconnectDevice()
         }
 
         override fun provisioningFailedFromDevice(failureReason: ESPConstants.ProvisionFailureReason?) {
           boss.e("provisioningFailedFromDevice $failureReason")
-          ctx.result.success(false)
+          resolve(false)
+          esp.disconnectDevice()
         }
 
         override fun deviceProvisioningSuccess() {
           boss.d("deviceProvisioningSuccess")
-          ctx.result.success(true)
+          resolve(true)
+          esp.disconnectDevice()
         }
 
         override fun onProvisioningFailed(e: java.lang.Exception?) {
-          boss.e("onProvisioningFailed")
-          ctx.result.success(false)
+          boss.e("onProvisioningFailed $e")
+          resolve(false)
+          esp.disconnectDevice()
         }
 
       })
-    }
+    },
+        { code, message, details ->
+          resolveError(code, message, details)
+        }
+    )
   }
 
 }

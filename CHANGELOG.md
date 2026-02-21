@@ -1,3 +1,9 @@
+## 0.0.7
+
+* Alpha: Harden Android/iOS plugin error handling and permission flow
+* Alpha: Expand method channel and bloc flow test coverage
+* Alpha: Align iOS podspec metadata with package information
+
 ## 0.0.1
 
 * Alpha: First release

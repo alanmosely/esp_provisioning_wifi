@@ -20,13 +20,16 @@ defaultConfig {
 }
 ```
 
-Add this in your `android/app/build.gradle` at the end of repositories:
+If your app enforces repositories via `settings.gradle` (`dependencyResolutionManagement`),
+ensure `jitpack.io` is present:
 
 ```
-allprojects {
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
-   	 ...
-   	 maven { url 'https://jitpack.io' }
+        google()
+        mavenCentral()
+        maven { url 'https://jitpack.io' }
     }
 }
 ```
@@ -54,6 +57,6 @@ The [Espressif Android Provisioning library](https://github.com/espressif/esp-id
 
 [logo]: https://raw.githubusercontent.com/alanmosely/esp_provisioning_wifi/master/logo.png
 [pub_badge]: https://img.shields.io/pub/v/esp_provisioning_wifi.svg
-[pub_link]: https://pub.dartlang.org/packages/esp_provisioning_wifi
+[pub_link]: https://pub.dev/packages/esp_provisioning_wifi
 [license_badge]: https://img.shields.io/badge/license-MIT-blue.svg
 [license_link]: https://opensource.org/licenses/MIT
