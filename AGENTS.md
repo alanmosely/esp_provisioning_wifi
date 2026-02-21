@@ -25,6 +25,10 @@ Use it to make safe, consistent changes quickly.
 - `example/`
   - Manual integration app.
 
+## Packaging Note
+- `AGENTS.md` is included in the published package tarball on pub.dev.
+- Do not include machine-local paths, credentials, secrets, or internal-only operational details.
+
 ## Preferred Tooling (Use Dart MCP First)
 When available, prefer Dart MCP tools over raw shell commands.
 
@@ -61,9 +65,12 @@ Fallback CLI commands:
 
 ### Method Channel Contracts
 - Keep method names and argument keys aligned across:
-  - Dart: `lib/src/flutter_esp_ble_prov/flutter_esp_ble_prov_method_channel.dart`
-  - Android: `android/src/main/kotlin/.../FlutterEspBleProvPlugin.kt`
-  - iOS: `ios/Classes/SwiftFlutterEspBleProvPlugin.swift`
+  - Dart channel wrapper: `lib/src/flutter_esp_ble_prov/flutter_esp_ble_prov_method_channel.dart`
+  - Dart method/key constants: `lib/src/flutter_esp_ble_prov/flutter_esp_ble_prov_method_names.dart`
+  - Android plugin entry: `android/src/main/kotlin/.../FlutterEspBleProvPlugin.kt`
+  - Android method/key constants: `android/src/main/kotlin/.../MethodNames.kt`
+  - Android error constants: `android/src/main/kotlin/.../ErrorCodes.kt`
+  - iOS plugin: `ios/Classes/SwiftFlutterEspBleProvPlugin.swift`
 - On missing/invalid args, return a proper `FlutterError`/`result.error`, do not crash.
 
 ### Android Plugin Rules
@@ -78,9 +85,27 @@ Fallback CLI commands:
 - Return early after error resolution to prevent duplicate responses.
 
 ## BLoC / Dart Rules
+- Public package users should import only:
+  - `package:esp_provisioning_wifi/esp_provisioning_wifi.dart`
+- Avoid adding new consumer-facing guidance that imports from `lib/src/*`.
 - Prefer constructor injection for services/timeouts/permission hooks in BLoC to keep tests deterministic.
 - Keep timeout behavior explicit and tested.
 - Handle nullable platform return values safely.
+- Keep timeout behavior aligned end-to-end:
+  - Dart BLoC request timeout
+  - Android connect timeout
+  - iOS connect timeout
+- Cancellation semantics:
+  - Native cancellation should map to `E_CANCELLED`.
+  - BLoC should map `E_CANCELLED` to `EspProvisioningFailure.cancelled`.
+  - Add/maintain tests for cancelled flows.
+
+## Compatibility / SemVer Rules
+- Treat these as potentially breaking changes that require explicit migration notes:
+  - Adding enum values in public enums (e.g., `EspProvisioningFailure`)
+  - Changing `FlutterEspBleProvPlatform` method signatures
+  - Changing public imports or API surface
+- If such a change is accepted, document migration in `README.md` and `CHANGELOG.md`.
 
 ## Dependency and Metadata Hygiene
 When changing releases/dependencies, keep these in sync:
@@ -115,3 +140,12 @@ When changing releases/dependencies, keep these in sync:
 4. Run tests.
 5. Update tests/docs/changelog/metadata as needed.
 6. Summarize what changed and why.
+
+## Release Workflow
+1. Ensure clean working tree and all checks green.
+2. Run `flutter pub publish --dry-run`.
+3. Verify `pubspec.yaml`, `CHANGELOG.md`, and `ios/esp_provisioning_wifi.podspec` versions match.
+4. Commit release changes.
+5. Create annotated git tag (`vX.Y.Z`).
+6. Run `flutter pub publish -f`.
+7. Push commit and tag to remote.
