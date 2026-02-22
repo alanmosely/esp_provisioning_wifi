@@ -44,6 +44,7 @@ class Boss {
   private val bleScanner = BleScanManager(this)
   private val wifiScanner = WifiScanManager(this)
   private val wifiProvisioner = WifiProvisionManager(this)
+  private val customDataFetcher = CustomDataManager(this)
 
   private lateinit var platformContext: Context
   lateinit var platformActivity: Activity
@@ -221,6 +222,7 @@ class Boss {
         MethodNames.SCAN_BLE_DEVICES -> bleScanner.call(ctx)
         MethodNames.SCAN_WIFI_NETWORKS -> wifiScanner.call(ctx)
         MethodNames.PROVISION_WIFI -> wifiProvisioner.call(ctx)
+        MethodNames.FETCH_CUSTOM_DATA -> customDataFetcher.call(ctx)
         else -> result.notImplemented()
       }
     }

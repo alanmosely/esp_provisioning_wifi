@@ -87,6 +87,29 @@ class MethodChannelFlutterEspBleProv extends FlutterEspBleProvPlatform {
     return result ?? true;
   }
 
+  @override
+  Future<String?> fetchCustomData(
+    String deviceName,
+    String proofOfPossession, {
+    String endpoint = 'custom-data',
+    String payload = '',
+    Duration? connectTimeout,
+  }) {
+    final args = {
+      'deviceName': deviceName,
+      'proofOfPossession': proofOfPossession,
+      FlutterEspBleProvMethodNames.endpointArg: endpoint,
+      FlutterEspBleProvMethodNames.payloadArg: payload,
+      if (connectTimeout != null)
+        FlutterEspBleProvMethodNames.connectTimeoutMsArg:
+            connectTimeout.inMilliseconds,
+    };
+    return methodChannel.invokeMethod<String?>(
+      FlutterEspBleProvMethodNames.fetchCustomData,
+      args,
+    );
+  }
+
   List<String> _decodeStringList({
     required String methodName,
     required List<Object?>? raw,

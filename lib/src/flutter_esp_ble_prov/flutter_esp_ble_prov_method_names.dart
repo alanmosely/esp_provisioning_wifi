@@ -7,7 +7,10 @@ class FlutterEspBleProvMethodNames {
   static const String scanBleDevices = 'scanBleDevices';
   static const String scanWifiNetworks = 'scanWifiNetworks';
   static const String provisionWifi = 'provisionWifi';
+  static const String fetchCustomData = 'fetchCustomData';
   static const String cancelOperations = 'cancelOperations';
 
   static const String connectTimeoutMsArg = 'connectTimeoutMs';
+  static const String endpointArg = 'endpoint';
+  static const String payloadArg = 'payload';
 }

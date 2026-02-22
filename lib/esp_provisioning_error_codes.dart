@@ -41,6 +41,9 @@ class EspProvisioningErrorCodes {
   /// BLE connect could not be started.
   static const String connect = 'E_CONNECT';
 
+  /// Custom provisioning endpoint request failed.
+  static const String customData = 'E_CUSTOM_DATA';
+
   /// iOS device creation failure.
   static const String iosDeviceCreate = 'E_DEVICE';
 

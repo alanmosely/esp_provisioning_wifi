@@ -52,4 +52,14 @@ abstract class FlutterEspBleProvPlatform extends PlatformInterface {
   Future<bool> cancelOperations() {
     throw UnimplementedError('cancelOperations has not been implemented');
   }
+
+  Future<String?> fetchCustomData(
+    String deviceName,
+    String proofOfPossession, {
+    String endpoint = 'custom-data',
+    String payload = '',
+    Duration? connectTimeout,
+  }) {
+    throw UnimplementedError('fetchCustomData has not been implemented');
+  }
 }

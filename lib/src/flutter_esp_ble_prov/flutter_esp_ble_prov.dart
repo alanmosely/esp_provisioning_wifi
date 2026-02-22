@@ -50,6 +50,26 @@ class FlutterEspBleProv {
     return FlutterEspBleProvPlatform.instance.cancelOperations();
   }
 
+  /// Reads custom provisioning endpoint data from a connected ESP device.
+  ///
+  /// The [endpoint] defaults to `custom-data` which is expected to exist on the
+  /// firmware provisioning manager.
+  Future<String?> fetchCustomData(
+    String deviceName,
+    String proofOfPossession, {
+    String endpoint = 'custom-data',
+    String payload = '',
+    Duration? connectTimeout,
+  }) {
+    return FlutterEspBleProvPlatform.instance.fetchCustomData(
+      deviceName,
+      proofOfPossession,
+      endpoint: endpoint,
+      payload: payload,
+      connectTimeout: connectTimeout,
+    );
+  }
+
   /// Returns the native platform version
   Future<String?> getPlatformVersion() {
     return FlutterEspBleProvPlatform.instance.getPlatformVersion();

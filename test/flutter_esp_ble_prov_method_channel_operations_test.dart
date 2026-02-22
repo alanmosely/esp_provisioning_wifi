@@ -178,4 +178,44 @@ void main() {
     final cancelled = await platform.cancelOperations();
     expect(cancelled, isTrue);
   });
+
+  test('fetchCustomData forwards args and returns payload', () async {
+    handler = (MethodCall call) async {
+      expect(call.method, FlutterEspBleProvMethodNames.fetchCustomData);
+      expect(call.arguments, {
+        'deviceName': 'PROV_01',
+        'proofOfPossession': 'abcd1234',
+        FlutterEspBleProvMethodNames.endpointArg: 'custom-data',
+        FlutterEspBleProvMethodNames.payloadArg: '',
+      });
+      return '{"softapPassword":"pw123"}';
+    };
+
+    final response = await platform.fetchCustomData(
+      'PROV_01',
+      'abcd1234',
+    );
+    expect(response, '{"softapPassword":"pw123"}');
+  });
+
+  test('fetchCustomData forwards connect timeout when provided', () async {
+    handler = (MethodCall call) async {
+      expect(call.method, FlutterEspBleProvMethodNames.fetchCustomData);
+      expect(call.arguments, {
+        'deviceName': 'PROV_01',
+        'proofOfPossession': 'abcd1234',
+        FlutterEspBleProvMethodNames.endpointArg: 'custom-data',
+        FlutterEspBleProvMethodNames.payloadArg: '',
+        FlutterEspBleProvMethodNames.connectTimeoutMsArg: 7000,
+      });
+      return '{}';
+    };
+
+    final response = await platform.fetchCustomData(
+      'PROV_01',
+      'abcd1234',
+      connectTimeout: const Duration(seconds: 7),
+    );
+    expect(response, '{}');
+  });
 }

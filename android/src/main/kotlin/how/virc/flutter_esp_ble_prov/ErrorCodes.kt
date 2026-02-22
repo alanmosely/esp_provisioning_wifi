@@ -8,6 +8,7 @@ object ErrorCodes {
   const val DEVICE_NOT_FOUND = "E_DEVICE_NOT_FOUND"
   const val CONNECT_TIMEOUT = "E_CONNECT_TIMEOUT"
   const val CONNECT_FAILED = "E_CONNECT"
+  const val CUSTOM_DATA_FAILED = "E_CUSTOM_DATA"
   const val CANCELLED = "E_CANCELLED"
   const val PERMISSION_DENIED = "E_PERMISSION"
 }

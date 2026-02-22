@@ -23,6 +23,8 @@ Library to provision WiFi on ESP32 devices over Bluetooth, using Bloc.
   - use `state.failure == EspProvisioningFailure.timeout`.
 - `scanWifiNetworks(...)` and `provisionWifi(...)` accept optional `connectTimeout`.
   - This timeout is propagated through Dart and native layers for BLE connection timing.
+- `fetchCustomData(...)` reads provisioning custom endpoint payloads (defaults to endpoint `custom-data`).
+  - Useful for firmware-driven provisioning metadata such as lock state or SoftAP password hints.
 
 ### Error Code Contract
 
@@ -37,6 +39,7 @@ Native layers report stable error codes that the bloc maps into `EspProvisioning
 - `E_INVALID_RESPONSE`
 - `E_CONNECT_TIMEOUT`
 - `E_CONNECT`
+- `E_CUSTOM_DATA`
 - `E_DEVICE`
 - `DEVICE_DISCONNECTED`
 - `E_CANCELLED`

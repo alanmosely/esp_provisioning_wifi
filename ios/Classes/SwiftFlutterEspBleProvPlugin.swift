@@ -6,6 +6,7 @@ private enum ErrorCodes {
     static let missingArgument = "E0"
     static let iosDeviceCreate = "E_DEVICE"
     static let deviceDisconnected = "DEVICE_DISCONNECTED"
+    static let customData = "E_CUSTOM_DATA"
     static let cancelled = "E_CANCELLED"
     static let connectTimeout = "E_CONNECT_TIMEOUT"
 }
@@ -16,6 +17,7 @@ private enum MethodNames {
     static let scanBleDevices = "scanBleDevices"
     static let scanWifiNetworks = "scanWifiNetworks"
     static let provisionWifi = "provisionWifi"
+    static let fetchCustomData = "fetchCustomData"
     static let cancelOperations = "cancelOperations"
 }
 
@@ -25,6 +27,8 @@ private enum ArgumentKeys {
     static let proofOfPossession = "proofOfPossession"
     static let ssid = "ssid"
     static let passphrase = "passphrase"
+    static let endpoint = "endpoint"
+    static let payload = "payload"
     static let connectTimeoutMs = "connectTimeoutMs"
 }
 
@@ -143,6 +147,24 @@ public class SwiftFlutterEspBleProvPlugin: NSObject, FlutterPlugin {
                 ssid: ssid,
                 passphrase: passphrase
             )
+        } else if call.method == MethodNames.fetchCustomData {
+            guard let deviceName = requiredStringArg(ArgumentKeys.deviceName, in: arguments, result: result) else { return }
+            guard let proofOfPossession = requiredStringArg(ArgumentKeys.proofOfPossession, in: arguments, result: result) else { return }
+            guard let endpoint = requiredStringArg(ArgumentKeys.endpoint, in: arguments, result: result) else { return }
+            let payload = arguments[ArgumentKeys.payload] as? String ?? ""
+            let connectTimeoutMs = optionalConnectTimeoutMs(in: arguments)
+            let provisionService = BLEProvisionService(
+                result: result,
+                coordinator: coordinator,
+                operationToken: coordinator.startOperation(),
+                connectTimeoutMs: connectTimeoutMs
+            )
+            provisionService.fetchCustomData(
+                deviceName: deviceName,
+                proofOfPossession: proofOfPossession,
+                endpoint: endpoint,
+                payload: payload
+            )
         } else {
             result(FlutterMethodNotImplemented)
         }
@@ -175,6 +197,7 @@ protocol ProvisionService {
     func searchDevices(prefix: String) -> Void
     func scanWifiNetworks(deviceName: String, proofOfPossession: String) -> Void
     func provision(deviceName: String, proofOfPossession: String, ssid: String, passphrase: String) -> Void
+    func fetchCustomData(deviceName: String, proofOfPossession: String, endpoint: String, payload: String) -> Void
 }
 
 private class BLEProvisionService: ProvisionService {
@@ -282,6 +305,43 @@ private class BLEProvisionService: ProvisionService {
                     self.resolve(false)
                     self.disconnect(device: device)
                 }
+            }
+        }
+    }
+
+    func fetchCustomData(
+        deviceName: String,
+        proofOfPossession: String,
+        endpoint: String,
+        payload: String
+    ) {
+        connect(deviceName: deviceName, proofOfPossession: proofOfPossession) {
+            device in
+            let payloadData = payload.data(using: .utf8) ?? Data()
+            device.sendData(path: endpoint, data: payloadData) { returnData, error in
+                if self.resolveCancelledIfInactive() {
+                    self.disconnect(device: device)
+                    return
+                }
+                if let error = error {
+                    self.resolve(
+                        FlutterError(
+                            code: ErrorCodes.customData,
+                            message: "Custom data request failed",
+                            details: String(describing: error)
+                        )
+                    )
+                    self.disconnect(device: device)
+                    return
+                }
+                guard let returnData = returnData else {
+                    self.resolve("")
+                    self.disconnect(device: device)
+                    return
+                }
+                let response = String(data: returnData, encoding: .utf8) ?? ""
+                self.resolve(response)
+                self.disconnect(device: device)
             }
         }
     }

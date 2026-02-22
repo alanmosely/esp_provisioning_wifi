@@ -10,7 +10,9 @@ import com.espressif.provisioning.ESPDevice
 import com.espressif.provisioning.WiFiAccessPoint
 import com.espressif.provisioning.listeners.BleScanListener
 import com.espressif.provisioning.listeners.ProvisionListener
+import com.espressif.provisioning.listeners.ResponseListener
 import com.espressif.provisioning.listeners.WiFiScanListener
+import java.nio.charset.StandardCharsets
 
 abstract class ActionManager(protected val boss: Boss) {
   abstract fun call(ctx: CallContext)
@@ -152,6 +154,108 @@ class WifiScanManager(boss: Boss) : ActionManager(boss) {
               disconnect(esp)
             }
           })
+        },
+        { code, message, details ->
+          resolveError(code, message, details)
+        })
+  }
+
+  private fun disconnect(esp: ESPDevice?) {
+    try {
+      esp?.disconnectDevice()
+    } catch (e: Exception) {
+      boss.e("disconnect failed: $e")
+    } finally {
+      boss.clearActiveDevice(esp)
+    }
+  }
+}
+
+class CustomDataManager(boss: Boss) : ActionManager(boss) {
+  override fun call(ctx: CallContext) {
+    val name = ctx.arg("deviceName") ?: return
+    val proofOfPossession = ctx.arg("proofOfPossession") ?: return
+    val endpoint = ctx.arg(ArgumentNames.ENDPOINT) ?: return
+    val payload = ctx.arg(ArgumentNames.PAYLOAD) ?: ""
+    val connectTimeoutMs = ctx.optionalInt(ArgumentNames.CONNECT_TIMEOUT_MS)
+        ?.takeIf { it > 0 }
+        ?.toLong()
+        ?: Boss.DEFAULT_CONNECT_TIMEOUT_MS
+    val operationToken = boss.startOperation()
+    val conn = boss.connector(name)
+    if (conn == null) {
+      if (boss.isOperationActive(operationToken)) {
+        ctx.result.error(
+            ErrorCodes.DEVICE_NOT_FOUND,
+            "Custom data request failed",
+            "No scanned BLE device named $name")
+      }
+      return
+    }
+
+    var resolved = false
+
+    fun resolveSuccess(response: String) {
+      if (resolved || !boss.isOperationActive(operationToken)) {
+        return
+      }
+      resolved = true
+      Handler(Looper.getMainLooper()).post {
+        if (!boss.isOperationActive(operationToken)) {
+          return@post
+        }
+        ctx.result.success(response)
+      }
+    }
+
+    fun resolveError(code: String, message: String, details: String?) {
+      if (resolved || !boss.isOperationActive(operationToken)) {
+        return
+      }
+      resolved = true
+      ctx.result.error(code, message, details)
+    }
+
+    boss.connect(
+        conn,
+        proofOfPossession,
+        operationToken,
+        connectTimeoutMs,
+        { esp ->
+          if (!boss.isOperationActive(operationToken)) {
+            disconnect(esp)
+            return@connect
+          }
+          esp.sendDataToCustomEndPoint(
+              endpoint,
+              payload.toByteArray(StandardCharsets.UTF_8),
+              object : ResponseListener {
+                override fun onSuccess(returnData: ByteArray?) {
+                  if (!boss.isOperationActive(operationToken)) {
+                    disconnect(esp)
+                    return
+                  }
+                  val response = if (returnData == null) {
+                    ""
+                  } else {
+                    String(returnData, StandardCharsets.UTF_8)
+                  }
+                  resolveSuccess(response)
+                  disconnect(esp)
+                }
+
+                override fun onFailure(e: java.lang.Exception?) {
+                  if (!boss.isOperationActive(operationToken)) {
+                    disconnect(esp)
+                    return
+                  }
+                  resolveError(
+                      ErrorCodes.CUSTOM_DATA_FAILED,
+                      "Custom data request failed",
+                      "Exception details $e")
+                  disconnect(esp)
+                }
+              })
         },
         { code, message, details ->
           resolveError(code, message, details)

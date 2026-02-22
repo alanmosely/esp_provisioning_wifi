@@ -1,3 +1,7 @@
+## 0.1.1
+
+* Alpha: Add `fetchCustomData(...)` API across Dart/Android/iOS for provisioning custom endpoint reads
+
 ## 0.1.0
 
 * Alpha: Add typed BLoC failure reasons via `EspProvisioningFailure`
