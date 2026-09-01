@@ -4,6 +4,9 @@ import ESPProvision
 
 private enum ErrorCodes {
     static let missingArgument = "E0"
+    static let wifiScanFailed = "E1"
+    static let bleScanFailed = "E_BLE_SCAN"
+    static let connectFailed = "E_CONNECT"
     static let iosDeviceCreate = "E_DEVICE"
     static let deviceDisconnected = "DEVICE_DISCONNECTED"
     static let customData = "E_CUSTOM_DATA"
@@ -235,11 +238,17 @@ private class BLEProvisionService: ProvisionService {
         return true
     }
 
-    private func fail(error: ESPError) {
+    private func fail(error: ESPError, code: String) {
         if resolveCancelledIfInactive() {
             return
         }
-        resolve(FlutterError(code: String(error.code), message: error.description, details: nil))
+        resolve(
+            FlutterError(
+                code: code,
+                message: error.description,
+                details: "ESPProvision error code \(error.code)"
+            )
+        )
     }
 
     private func disconnect(device: ESPDevice?) {
@@ -256,7 +265,7 @@ private class BLEProvisionService: ProvisionService {
                 return
             }
             if let error = error {
-                self.fail(error: error)
+                self.fail(error: error, code: ErrorCodes.bleScanFailed)
                 return
             }
             self.resolve((deviceList ?? []).map({ (device: ESPDevice) -> String in
@@ -275,7 +284,7 @@ private class BLEProvisionService: ProvisionService {
                 }
                 if let error = error {
                     NSLog("Error scanning Wi-Fi networks")
-                    self.fail(error: error)
+                    self.fail(error: error, code: ErrorCodes.wifiScanFailed)
                     self.disconnect(device: device)
                     return
                 }
@@ -360,7 +369,7 @@ private class BLEProvisionService: ProvisionService {
                 return
             }
             if let error = error {
-                self.fail(error: error)
+                self.fail(error: error, code: ErrorCodes.iosDeviceCreate)
                 return
             }
             guard let espDevice = espDevice else {
@@ -410,7 +419,7 @@ private class BLEProvisionService: ProvisionService {
                     case .connected:
                         completionHandler(espDevice)
                     case let .failedToConnect(error):
-                        self.fail(error: error)
+                        self.fail(error: error, code: ErrorCodes.connectFailed)
                         self.disconnect(device: espDevice)
                     default:
                         self.resolve(FlutterError(code: ErrorCodes.deviceDisconnected, message: nil, details: nil))

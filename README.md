@@ -16,6 +16,7 @@ Library to provision WiFi on ESP32 devices over Bluetooth, using Bloc.
   - `true` means provisioning completed successfully.
   - `false` means provisioning completed but was not successful.
 - `cancelOperations()` returns `Future<bool>` and cancels active native work.
+  - In-flight scan/provision calls fail with `E_CANCELLED` (`EspProvisioningFailure.cancelled`) on both platforms.
 - `EspProvisioningState.failure` exposes typed failures using `EspProvisioningFailure`.
   - `none`, `permissionDenied`, `timeout`, `cancelled`, `deviceNotFound`, `invalidResponse`, `platform`, `unknown`.
 - `EspProvisioningState.errorCode` and `errorDetails` expose raw platform diagnostics.
@@ -23,6 +24,11 @@ Library to provision WiFi on ESP32 devices over Bluetooth, using Bloc.
   - use `state.failure == EspProvisioningFailure.timeout`.
 - `scanWifiNetworks(...)` and `provisionWifi(...)` accept optional `connectTimeout`.
   - This timeout is propagated through Dart and native layers for BLE connection timing.
+- Dart-side request timeouts cancel the in-flight native operation and surface as
+  `failure == EspProvisioningFailure.timeout`.
+  - On timeout the step status (e.g. `wifiScanned`) is still emitted; `status` is
+    not set to `error`. Listen on `state.failure != EspProvisioningFailure.none`
+    to catch all failures, including timeouts.
 - `fetchCustomData(...)` reads provisioning custom endpoint payloads (defaults to endpoint `custom-data`).
   - Useful for firmware-driven provisioning metadata such as lock state or SoftAP password hints.
 
@@ -65,8 +71,10 @@ BlocProvider(
   create: (_) => EspProvisioningBloc(),
   child: BlocConsumer<EspProvisioningBloc, EspProvisioningState>(
     listener: (_, state) {
-      if (state.status == EspProvisioningStatus.error) {
-        // Use typed failure for user-facing behavior.
+      if (state.failure != EspProvisioningFailure.none) {
+        // Use typed failure for user-facing behavior. Checking `failure`
+        // rather than `status == error` also catches timeouts, which keep
+        // their step status.
         debugPrint('Failure: ${state.failure} | ${state.errorMsg}');
       }
     },
@@ -116,13 +124,14 @@ Add this in your `ios/Runner/Info.plist`:
 
 ## Notes
 
-### flutter_esp_ble_prov
+### Origins
 
-This library is a [Bloc](https://pub.dev/packages/flutter_bloc) wrapper over [flutter_esp_ble_prov](https://pub.dev/packages/flutter_esp_ble_prov).
+This library started as a [Bloc](https://pub.dev/packages/flutter_bloc) wrapper over [flutter_esp_ble_prov](https://pub.dev/packages/flutter_esp_ble_prov). The native Android and iOS provisioning implementations are now maintained inside this package.
 
-### esp-idf-provisioning-android
+### Espressif provisioning libraries
 
-The [Espressif Android Provisioning library](https://github.com/espressif/esp-idf-provisioning-android) is currently embedded in libs.
+- Android uses [esp-idf-provisioning-android](https://github.com/espressif/esp-idf-provisioning-android), resolved via JitPack.
+- iOS uses the [ESPProvision](https://github.com/espressif/esp-idf-provisioning-ios) CocoaPod.
 
 [logo]: https://raw.githubusercontent.com/alanmosely/esp_provisioning_wifi/master/logo.png
 [pub_badge]: https://img.shields.io/pub/v/esp_provisioning_wifi.svg

@@ -3,8 +3,6 @@ package how.virc.flutter_esp_ble_prov
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.le.ScanResult
-import android.os.Handler
-import android.os.Looper
 import com.espressif.provisioning.ESPConstants
 import com.espressif.provisioning.ESPDevice
 import com.espressif.provisioning.WiFiAccessPoint
@@ -16,6 +14,27 @@ import java.nio.charset.StandardCharsets
 
 abstract class ActionManager(protected val boss: Boss) {
   abstract fun call(ctx: CallContext)
+
+  /**
+   * Starts a fresh operation (cancelling any in-flight one) and returns its
+   * resolver, registered with the boss so a later cancellation can resolve it.
+   */
+  protected fun startResolver(ctx: CallContext): OperationResolver {
+    val operationToken = boss.startOperation()
+    val resolver = OperationResolver(boss, operationToken, ctx.result)
+    boss.trackResolver(resolver)
+    return resolver
+  }
+
+  protected fun disconnect(esp: ESPDevice?) {
+    try {
+      esp?.disconnectDevice()
+    } catch (e: Exception) {
+      boss.e("disconnect failed: $e")
+    } finally {
+      boss.clearActiveDevice(esp)
+    }
+  }
 }
 
 class BleScanManager(boss: Boss) : ActionManager(boss) {
@@ -24,37 +43,20 @@ class BleScanManager(boss: Boss) : ActionManager(boss) {
   override fun call(ctx: CallContext) {
     boss.d("searchBleEspDevices: start")
     val prefix = ctx.arg("prefix") ?: return
-    val operationToken = boss.startOperation()
+    val resolver = startResolver(ctx)
     boss.devices.clear()
-    var resolved = false
-
-    fun resolveError(code: String, message: String, details: String?) {
-      if (resolved || !boss.isOperationActive(operationToken)) {
-        return
-      }
-      resolved = true
-      ctx.result.error(code, message, details)
-    }
-
-    fun resolveSuccess(devices: List<String>) {
-      if (resolved || !boss.isOperationActive(operationToken)) {
-        return
-      }
-      resolved = true
-      ctx.result.success(ArrayList<String>(devices))
-    }
 
     boss.espManager.searchBleEspDevices(prefix, object : BleScanListener {
       override fun scanStartFailed() {
         boss.e("searchBleEspDevices: scanStartFailed")
-        resolveError(
+        resolver.error(
             ErrorCodes.BLE_SCAN_START_FAILED,
             "BLE scan failed to start",
             "Espressif BLE scan could not be started")
       }
 
       override fun onPeripheralFound(device: BluetoothDevice?, scanResult: ScanResult?) {
-        if (!boss.isOperationActive(operationToken)) {
+        if (!boss.isOperationActive(resolver.operationToken)) {
           return
         }
         device ?: return
@@ -64,13 +66,13 @@ class BleScanManager(boss: Boss) : ActionManager(boss) {
       }
 
       override fun scanCompleted() {
-        resolveSuccess(boss.devices.keys.toList())
+        resolver.success(ArrayList<String>(boss.devices.keys.toList()))
         boss.d("searchBleEspDevices: scanComplete")
       }
 
       override fun onFailure(e: java.lang.Exception?) {
         boss.e("searchBleEspDevices: onFailure $e")
-        resolveError(ErrorCodes.BLE_SCAN_FAILED, "BLE scan failed", "Exception details $e")
+        resolver.error(ErrorCodes.BLE_SCAN_FAILED, "BLE scan failed", "Exception details $e")
       }
     })
   }
@@ -80,94 +82,53 @@ class WifiScanManager(boss: Boss) : ActionManager(boss) {
   override fun call(ctx: CallContext) {
     val name = ctx.arg("deviceName") ?: return
     val proofOfPossession = ctx.arg("proofOfPossession") ?: return
-    val connectTimeoutMs = ctx.optionalInt(ArgumentNames.CONNECT_TIMEOUT_MS)
-        ?.takeIf { it > 0 }
-        ?.toLong()
-        ?: Boss.DEFAULT_CONNECT_TIMEOUT_MS
-    val operationToken = boss.startOperation()
+    val connectTimeoutMs = ctx.connectTimeoutMs()
+    val resolver = startResolver(ctx)
     val conn = boss.connector(name)
     if (conn == null) {
-      if (boss.isOperationActive(operationToken)) {
-        ctx.result.error(
-            ErrorCodes.DEVICE_NOT_FOUND,
-            "WiFi scan failed",
-            "No scanned BLE device named $name")
-      }
+      resolver.error(
+          ErrorCodes.DEVICE_NOT_FOUND,
+          "WiFi scan failed",
+          "No scanned BLE device named $name")
       return
     }
 
     boss.networks.clear()
     boss.d("esp connect: start")
-    var resolved = false
-
-    fun resolveError(code: String, message: String, details: String?) {
-      if (resolved || !boss.isOperationActive(operationToken)) {
-        return
-      }
-      resolved = true
-      ctx.result.error(code, message, details)
-    }
-
-    fun resolveSuccess(networks: List<String>) {
-      if (resolved || !boss.isOperationActive(operationToken)) {
-        return
-      }
-      resolved = true
-      Handler(Looper.getMainLooper()).post {
-        if (!boss.isOperationActive(operationToken)) {
-          return@post
-        }
-        ctx.result.success(ArrayList<String>(networks))
-      }
-    }
 
     boss.connect(
         conn,
         proofOfPossession,
-        operationToken,
+        resolver.operationToken,
         connectTimeoutMs,
         { esp ->
-          if (!boss.isOperationActive(operationToken)) {
+          if (resolver.cancelledIfInactive()) {
             disconnect(esp)
             return@connect
           }
           boss.d("scanNetworks: start")
           esp.scanNetworks(object : WiFiScanListener {
             override fun onWifiListReceived(wifiList: ArrayList<WiFiAccessPoint>?) {
-              if (!boss.isOperationActive(operationToken)) {
+              if (resolver.cancelledIfInactive()) {
                 disconnect(esp)
                 return
               }
               wifiList?.forEach { boss.networks.add(it.wifiName) }
               boss.d("scanNetworks: complete (${boss.networks.size} networks)")
-              resolveSuccess(boss.networks.toList())
+              resolver.success(ArrayList<String>(boss.networks.toList()))
               disconnect(esp)
             }
 
             override fun onWiFiScanFailed(e: java.lang.Exception?) {
-              if (!boss.isOperationActive(operationToken)) {
-                disconnect(esp)
-                return
-              }
               boss.e("scanNetworks: error $e")
-              resolveError(ErrorCodes.WIFI_SCAN_FAILED, "WiFi scan failed", "Exception details $e")
+              resolver.error(ErrorCodes.WIFI_SCAN_FAILED, "WiFi scan failed", "Exception details $e")
               disconnect(esp)
             }
           })
         },
         { code, message, details ->
-          resolveError(code, message, details)
+          resolver.error(code, message, details)
         })
-  }
-
-  private fun disconnect(esp: ESPDevice?) {
-    try {
-      esp?.disconnectDevice()
-    } catch (e: Exception) {
-      boss.e("disconnect failed: $e")
-    } finally {
-      boss.clearActiveDevice(esp)
-    }
   }
 }
 
@@ -176,53 +137,25 @@ class CustomDataManager(boss: Boss) : ActionManager(boss) {
     val name = ctx.arg("deviceName") ?: return
     val proofOfPossession = ctx.arg("proofOfPossession") ?: return
     val endpoint = ctx.arg(ArgumentNames.ENDPOINT) ?: return
-    val payload = ctx.arg(ArgumentNames.PAYLOAD) ?: ""
-    val connectTimeoutMs = ctx.optionalInt(ArgumentNames.CONNECT_TIMEOUT_MS)
-        ?.takeIf { it > 0 }
-        ?.toLong()
-        ?: Boss.DEFAULT_CONNECT_TIMEOUT_MS
-    val operationToken = boss.startOperation()
+    val payload = ctx.optionalString(ArgumentNames.PAYLOAD) ?: ""
+    val connectTimeoutMs = ctx.connectTimeoutMs()
+    val resolver = startResolver(ctx)
     val conn = boss.connector(name)
     if (conn == null) {
-      if (boss.isOperationActive(operationToken)) {
-        ctx.result.error(
-            ErrorCodes.DEVICE_NOT_FOUND,
-            "Custom data request failed",
-            "No scanned BLE device named $name")
-      }
+      resolver.error(
+          ErrorCodes.DEVICE_NOT_FOUND,
+          "Custom data request failed",
+          "No scanned BLE device named $name")
       return
-    }
-
-    var resolved = false
-
-    fun resolveSuccess(response: String) {
-      if (resolved || !boss.isOperationActive(operationToken)) {
-        return
-      }
-      resolved = true
-      Handler(Looper.getMainLooper()).post {
-        if (!boss.isOperationActive(operationToken)) {
-          return@post
-        }
-        ctx.result.success(response)
-      }
-    }
-
-    fun resolveError(code: String, message: String, details: String?) {
-      if (resolved || !boss.isOperationActive(operationToken)) {
-        return
-      }
-      resolved = true
-      ctx.result.error(code, message, details)
     }
 
     boss.connect(
         conn,
         proofOfPossession,
-        operationToken,
+        resolver.operationToken,
         connectTimeoutMs,
         { esp ->
-          if (!boss.isOperationActive(operationToken)) {
+          if (resolver.cancelledIfInactive()) {
             disconnect(esp)
             return@connect
           }
@@ -231,7 +164,7 @@ class CustomDataManager(boss: Boss) : ActionManager(boss) {
               payload.toByteArray(StandardCharsets.UTF_8),
               object : ResponseListener {
                 override fun onSuccess(returnData: ByteArray?) {
-                  if (!boss.isOperationActive(operationToken)) {
+                  if (resolver.cancelledIfInactive()) {
                     disconnect(esp)
                     return
                   }
@@ -240,16 +173,12 @@ class CustomDataManager(boss: Boss) : ActionManager(boss) {
                   } else {
                     String(returnData, StandardCharsets.UTF_8)
                   }
-                  resolveSuccess(response)
+                  resolver.success(response)
                   disconnect(esp)
                 }
 
                 override fun onFailure(e: java.lang.Exception?) {
-                  if (!boss.isOperationActive(operationToken)) {
-                    disconnect(esp)
-                    return
-                  }
-                  resolveError(
+                  resolver.error(
                       ErrorCodes.CUSTOM_DATA_FAILED,
                       "Custom data request failed",
                       "Exception details $e")
@@ -258,18 +187,8 @@ class CustomDataManager(boss: Boss) : ActionManager(boss) {
               })
         },
         { code, message, details ->
-          resolveError(code, message, details)
+          resolver.error(code, message, details)
         })
-  }
-
-  private fun disconnect(esp: ESPDevice?) {
-    try {
-      esp?.disconnectDevice()
-    } catch (e: Exception) {
-      boss.e("disconnect failed: $e")
-    } finally {
-      boss.clearActiveDevice(esp)
-    }
   }
 }
 
@@ -280,59 +199,32 @@ class WifiProvisionManager(boss: Boss) : ActionManager(boss) {
     val passphrase = ctx.arg("passphrase") ?: return
     val deviceName = ctx.arg("deviceName") ?: return
     val proofOfPossession = ctx.arg("proofOfPossession") ?: return
-    val connectTimeoutMs = ctx.optionalInt(ArgumentNames.CONNECT_TIMEOUT_MS)
-        ?.takeIf { it > 0 }
-        ?.toLong()
-        ?: Boss.DEFAULT_CONNECT_TIMEOUT_MS
-    val operationToken = boss.startOperation()
+    val connectTimeoutMs = ctx.connectTimeoutMs()
+    val resolver = startResolver(ctx)
     val conn = boss.connector(deviceName)
     if (conn == null) {
-      if (boss.isOperationActive(operationToken)) {
-        ctx.result.error(
-            ErrorCodes.DEVICE_NOT_FOUND,
-            "WiFi provisioning failed",
-            "No scanned BLE device named $deviceName")
-      }
+      resolver.error(
+          ErrorCodes.DEVICE_NOT_FOUND,
+          "WiFi provisioning failed",
+          "No scanned BLE device named $deviceName")
       return
-    }
-
-    var resolved = false
-
-    fun resolve(success: Boolean) {
-      if (resolved || !boss.isOperationActive(operationToken)) {
-        return
-      }
-      resolved = true
-      ctx.result.success(success)
-    }
-
-    fun resolveError(code: String, message: String, details: String?) {
-      if (resolved || !boss.isOperationActive(operationToken)) {
-        return
-      }
-      resolved = true
-      ctx.result.error(code, message, details)
     }
 
     boss.connect(
         conn,
         proofOfPossession,
-        operationToken,
+        resolver.operationToken,
         connectTimeoutMs,
         { esp ->
-          if (!boss.isOperationActive(operationToken)) {
+          if (resolver.cancelledIfInactive()) {
             disconnect(esp)
             return@connect
           }
           boss.d("provision: start")
           esp.provision(ssid, passphrase, object : ProvisionListener {
             override fun createSessionFailed(e: java.lang.Exception?) {
-              if (!boss.isOperationActive(operationToken)) {
-                disconnect(esp)
-                return
-              }
               boss.e("wifiprovision createSessionFailed $e")
-              resolve(false)
+              resolver.success(false)
               disconnect(esp)
             }
 
@@ -341,12 +233,8 @@ class WifiProvisionManager(boss: Boss) : ActionManager(boss) {
             }
 
             override fun wifiConfigFailed(e: java.lang.Exception?) {
-              if (!boss.isOperationActive(operationToken)) {
-                disconnect(esp)
-                return
-              }
-              boss.e("wifiConfiFailed $e")
-              resolve(false)
+              boss.e("wifiConfigFailed $e")
+              resolver.success(false)
               disconnect(esp)
             }
 
@@ -355,60 +243,34 @@ class WifiProvisionManager(boss: Boss) : ActionManager(boss) {
             }
 
             override fun wifiConfigApplyFailed(e: java.lang.Exception?) {
-              if (!boss.isOperationActive(operationToken)) {
-                disconnect(esp)
-                return
-              }
               boss.e("wifiConfigApplyFailed $e")
-              resolve(false)
+              resolver.success(false)
               disconnect(esp)
             }
 
             override fun provisioningFailedFromDevice(
                 failureReason: ESPConstants.ProvisionFailureReason?
             ) {
-              if (!boss.isOperationActive(operationToken)) {
-                disconnect(esp)
-                return
-              }
               boss.e("provisioningFailedFromDevice $failureReason")
-              resolve(false)
+              resolver.success(false)
               disconnect(esp)
             }
 
             override fun deviceProvisioningSuccess() {
-              if (!boss.isOperationActive(operationToken)) {
-                disconnect(esp)
-                return
-              }
               boss.d("deviceProvisioningSuccess")
-              resolve(true)
+              resolver.success(true)
               disconnect(esp)
             }
 
             override fun onProvisioningFailed(e: java.lang.Exception?) {
-              if (!boss.isOperationActive(operationToken)) {
-                disconnect(esp)
-                return
-              }
               boss.e("onProvisioningFailed $e")
-              resolve(false)
+              resolver.success(false)
               disconnect(esp)
             }
           })
         },
         { code, message, details ->
-          resolveError(code, message, details)
+          resolver.error(code, message, details)
         })
-  }
-
-  private fun disconnect(esp: ESPDevice?) {
-    try {
-      esp?.disconnectDevice()
-    } catch (e: Exception) {
-      boss.e("disconnect failed: $e")
-    } finally {
-      boss.clearActiveDevice(esp)
-    }
   }
 }

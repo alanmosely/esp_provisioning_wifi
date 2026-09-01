@@ -51,6 +51,7 @@ class Boss {
 
   @Volatile private var currentOperationToken = 0
   @Volatile private var activeDevice: ESPDevice? = null
+  @Volatile private var activeResolver: OperationResolver? = null
 
   val espManager: ESPProvisionManager
     get() = ESPProvisionManager.getInstance(platformContext)
@@ -68,6 +69,7 @@ class Boss {
   fun startOperation(): Int {
     currentOperationToken += 1
     disconnectActiveDeviceLocked()
+    cancelActiveResolverLocked()
     return currentOperationToken
   }
 
@@ -75,7 +77,19 @@ class Boss {
   fun cancelOperations(): Boolean {
     currentOperationToken += 1
     disconnectActiveDeviceLocked()
+    cancelActiveResolverLocked()
     return true
+  }
+
+  @Synchronized
+  fun trackResolver(resolver: OperationResolver) {
+    activeResolver = resolver
+  }
+
+  private fun cancelActiveResolverLocked() {
+    val resolver = activeResolver ?: return
+    activeResolver = null
+    resolver.cancelled()
   }
 
   @Synchronized
@@ -136,11 +150,13 @@ class Boss {
           bus.unregister(it)
         }
       }
-      if (!isOperationActive(operationToken)) {
+      try {
+        esp.disconnectDevice()
+      } catch (e: Exception) {
+        e("disconnect after connect failure failed: $e")
+      } finally {
         clearActiveDevice(esp)
-        return
       }
-      clearActiveDevice(esp)
       onErrorCallback(code, message, details)
     }
 
@@ -173,10 +189,23 @@ class Boss {
               } finally {
                 clearActiveDevice(esp)
               }
+              onErrorCallback(ErrorCodes.CANCELLED, "Operation cancelled", null)
               return
             }
             esp.proofOfPossession = proofOfPossession
             onConnectCallback(esp)
+          }
+          ESPConstants.EVENT_DEVICE_CONNECTION_FAILED -> {
+            resolveConnectError(
+                ErrorCodes.CONNECT_FAILED,
+                "Failed to connect to BLE device",
+                "ESP device reported a connection failure")
+          }
+          ESPConstants.EVENT_DEVICE_DISCONNECTED -> {
+            resolveConnectError(
+                ErrorCodes.CONNECT_FAILED,
+                "BLE device disconnected during connect",
+                "ESP device disconnected before the session was established")
           }
         }
       }

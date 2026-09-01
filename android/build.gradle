@@ -53,7 +53,7 @@ def flutterJar = flutterSdkPath == null
 android {
     namespace "how.virc.flutter_esp_ble_prov"
 
-    compileSdkVersion 31
+    compileSdkVersion 34
 
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8

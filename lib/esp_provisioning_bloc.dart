@@ -348,6 +348,13 @@ class EspProvisioningBloc
         return timeoutValue;
       },
     );
+    if (timedOut) {
+      try {
+        await espProvisioningService.cancelOperations();
+      } on Object catch (_) {
+        // Best-effort cleanup; the timeout outcome is already being reported.
+      }
+    }
     return _TimedResult<T>(value: value, timedOut: timedOut);
   }
 }

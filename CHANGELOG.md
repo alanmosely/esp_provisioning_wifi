@@ -1,3 +1,16 @@
+## 0.1.2
+
+* Alpha: Resolve cancelled/superseded Android method calls with `E_CANCELLED` instead of leaving their futures pending forever, matching iOS cancellation semantics
+* Alpha: Deliver all Android method channel results on the main thread via a shared `OperationResolver` (Espressif callbacks arrive on background threads)
+* Alpha: Fail fast on Android when the BLE connect phase reports connection-failed/disconnected instead of waiting out the connect timeout
+* Alpha: Disconnect in-progress Android BLE connect attempts when a connect timeout or connect error fires
+* Alpha: Fix Android `fetchCustomData` double-resolving the method call when the optional `payload` argument is omitted
+* Alpha: Map iOS ESPProvision failures to contract error codes (`E_BLE_SCAN`, `E1`, `E_CONNECT`, `E_DEVICE`), preserving raw ESP error codes in error details
+* Alpha: Cancel in-flight native work when the Dart-side request timeout fires in `EspProvisioningBloc`
+* Alpha: Remove the Android manifest `package` attribute and raise `compileSdk` to 34 for AGP 8 compatibility
+* Alpha: Align iOS podspec version with the package version
+* Alpha: Refresh stale package/README descriptions (native implementations live in this package; the Espressif Android library is resolved via JitPack)
+
 ## 0.1.1
 
 * Alpha: Add `fetchCustomData(...)` API across Dart/Android/iOS for provisioning custom endpoint reads

@@ -151,6 +151,12 @@ void main() {
         failure: EspProvisioningFailure.timeout,
       ),
     ],
+    verify: (bloc) {
+      final service = bloc.espProvisioningService as FakeProvisioningService;
+      // Once when the handler starts, once again to cancel the timed-out
+      // native operation.
+      expect(service.cancelOperationsCalls, 2);
+    },
   );
 
   blocTest<EspProvisioningBloc, EspProvisioningState>(

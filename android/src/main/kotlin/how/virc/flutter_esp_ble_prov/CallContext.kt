@@ -24,10 +24,27 @@ class CallContext(val call: MethodCall, val result: Result) {
   }
 
   /**
+   * Extracts an optional string argument from the method call without
+   * resolving an error when it is absent.
+   */
+  fun optionalString(name: String): String? = call.argument<String>(name)
+
+  /**
    * Extracts an optional integer argument from the method call.
    */
   fun optionalInt(name: String): Int? {
     val value = call.argument<Number>(name) ?: return null
     return value.toInt()
+  }
+
+  /**
+   * Extracts the optional connect timeout, falling back to the default when
+   * absent or non-positive.
+   */
+  fun connectTimeoutMs(): Long {
+    return optionalInt(ArgumentNames.CONNECT_TIMEOUT_MS)
+        ?.takeIf { it > 0 }
+        ?.toLong()
+        ?: Boss.DEFAULT_CONNECT_TIMEOUT_MS
   }
 }

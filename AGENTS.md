@@ -77,6 +77,11 @@ Fallback CLI commands:
 - Never leave `TODO("Not yet implemented")` in callback paths.
 - Permission result must be checked from `grantResults`; do not assume granted.
 - Always return a method result in all branches.
+- Resolve operation results through `OperationResolver` (main-thread,
+  exactly-once, cancellation-aware); never call `Result` methods directly from
+  Espressif listener callbacks, which arrive on background threads.
+- Cancelled/superseded operations must resolve with `E_CANCELLED`, never be
+  left unresolved.
 - Avoid stale data leaks: clear device/network scan caches before new scans.
 
 ### iOS Plugin Rules
