@@ -32,6 +32,7 @@ class EspProvisioningWifiPlugin :
   override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
     Log.d(logTag, "onDetachedFromEngine: $binding")
     channel.setMethodCallHandler(null)
+    boss.cancelOperations()
   }
 
   override fun onMethodCall(call: MethodCall, result: Result) {
@@ -46,7 +47,7 @@ class EspProvisioningWifiPlugin :
 
   override fun onDetachedFromActivityForConfigChanges() {
     Log.d(logTag, "onDetachedFromActivityForConfigChanges")
-    activityBinding?.let { tearDown(it) }
+    activityBinding?.let { tearDown(it, permanent = false) }
   }
 
   override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {
@@ -56,7 +57,7 @@ class EspProvisioningWifiPlugin :
 
   override fun onDetachedFromActivity() {
     Log.d(logTag, "onDetachedFromActivity")
-    activityBinding?.let { tearDown(it) }
+    activityBinding?.let { tearDown(it, permanent = true) }
   }
 
   override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?): Boolean {
@@ -71,9 +72,10 @@ class EspProvisioningWifiPlugin :
     boss.attachActivity(binding.activity)
   }
 
-  private fun tearDown(binding: ActivityPluginBinding) {
+  private fun tearDown(binding: ActivityPluginBinding, permanent: Boolean) {
     binding.removeActivityResultListener(this)
     boss.detachBinding(binding)
+    boss.detachActivity(permanent)
     activityBinding = null
   }
 }

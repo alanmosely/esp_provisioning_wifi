@@ -43,7 +43,8 @@ class Boss {
   private val customDataFetcher = CustomDataManager(this)
 
   private lateinit var platformContext: Context
-  lateinit var platformActivity: Activity
+  var platformActivity: Activity? = null
+    private set
 
   @Volatile private var currentOperationToken = 0
   @Volatile private var activeDevice: ESPDevice? = null
@@ -84,8 +85,6 @@ class Boss {
   fun e(msg: String) = Log.e(logTag, msg)
 
   fun connector(deviceName: String): BleConnector? = devices[deviceName]
-
-  fun hasAttachedActivity(): Boolean = this::platformActivity.isInitialized
 
   @Synchronized
   fun startOperation(): Int {
@@ -293,6 +292,19 @@ class Boss {
 
   fun attachActivity(activity: Activity) {
     platformActivity = activity
+  }
+
+  /**
+   * Clears the activity so new permission checks fail fast while detached.
+   * Pending permission callbacks are failed only on [permanent] detach: across
+   * a config change the same PermissionManager is re-registered on the new
+   * binding and the recreated Activity re-delivers the dialog result.
+   */
+  fun detachActivity(permanent: Boolean) {
+    platformActivity = null
+    if (permanent) {
+      permissionManager.onActivityDetached()
+    }
   }
 
   fun attachContext(context: Context) {

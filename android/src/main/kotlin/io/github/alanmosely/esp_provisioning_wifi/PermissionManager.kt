@@ -37,14 +37,15 @@ class PermissionManager(private val boss: Boss) :
    * Check permissions are granted and request them otherwise.
    */
   fun ensure(callback: (Boolean) -> Unit) {
-    if (!boss.hasAttachedActivity()) {
+    val activity = boss.platformActivity
+    if (activity == null) {
       callback(false)
       return
     }
 
     val toRequest = mutableListOf<String>()
     for (permission in permissions) {
-      if (ActivityCompat.checkSelfPermission(boss.platformActivity, permission) !=
+      if (ActivityCompat.checkSelfPermission(activity, permission) !=
           PackageManager.PERMISSION_GRANTED) {
         toRequest.add(permission)
       }
@@ -61,10 +62,26 @@ class PermissionManager(private val boss: Boss) :
 
     requestInFlight = true
     ActivityCompat.requestPermissions(
-        boss.platformActivity,
+        activity,
         toRequest.toTypedArray(),
         requestCode,
     )
+  }
+
+  /**
+   * Fails all pending callbacks. Call only on PERMANENT Activity detach, where
+   * the dialog dies with the Activity and no result can arrive. On config
+   * changes pending state must survive: the OS re-delivers the dialog result
+   * to the recreated Activity and it reaches this listener via the new binding.
+   */
+  fun onActivityDetached() {
+    requestInFlight = false
+    if (pendingCallbacks.isEmpty()) {
+      return
+    }
+    val callbacks = pendingCallbacks.toList()
+    pendingCallbacks.clear()
+    callbacks.forEach { it(false) }
   }
 
   /**
