@@ -12,12 +12,21 @@ Library to provision WiFi on ESP32 devices over Bluetooth, using Bloc.
 
 - Import the package via the public barrel:
   - `import 'package:esp_provisioning_wifi/esp_provisioning_wifi.dart';`
+- Most apps drive the flow through `EspProvisioningBloc` (see Usage). For
+  direct, non-Bloc use, instantiate `EspProvisioningService()` from the same
+  import; it exposes all of the methods below plus `getPlatformVersion()`.
+- `scanBleDevices(prefix)` returns `Future<List<String>>` of matching device
+  names and must run before `scanWifiNetworks`/`provisionWifi`.
 - `scanWifiNetworks(...)` returns `Future<List<EspWifiNetwork>>`.
-  - Each network exposes `ssid`, plus `rssi` (dBm) and `security` where the
-    platform reports them (currently Android only; null on iOS).
+  - Each network exposes `ssid` (`String`), plus `rssi` (dBm, `int?`) and
+    `security` (a typed `EspWifiSecurity` enum mirroring Espressif's
+    `WifiAuthMode`) where the platform reports them (currently Android only;
+    null on iOS).
 - `provisionWifi(...)` returns `Future<bool>`.
   - It resolves `true` on success and throws a `PlatformException` with a typed
-    `E_PROV_*` code on failure.
+    error code on failure: `E_PROV_*` for provisioning-phase failures, or a
+    connect-phase code such as `E_CONNECT`, `E_CONNECT_TIMEOUT` or
+    `E_CANCELLED` (see the Error Code Contract below).
 - `cancelOperations()` returns `Future<bool>` and cancels active native work.
   - In-flight scan/provision calls fail with `E_CANCELLED` (`EspProvisioningFailure.cancelled`) on both platforms.
 - `EspProvisioningState.failure` exposes typed failures using `EspProvisioningFailure`.
@@ -31,12 +40,16 @@ Library to provision WiFi on ESP32 devices over Bluetooth, using Bloc.
   and `requestTimeout` (overall operation budget, default `connectTimeout` + 20s).
 - Dart-side request timeouts cancel the in-flight native operation and emit
   `status: EspProvisioningStatus.error` with `failure == EspProvisioningFailure.timeout`.
-- `fetchCustomData(...)` reads provisioning custom endpoint payloads (defaults to endpoint `custom-data`).
+- `fetchCustomData(deviceName, proofOfPossession, {endpoint = 'custom-data', payload = '', connectTimeout})`
+  returns `Future<String?>` and reads provisioning custom endpoint payloads.
+  - Service-level only (there is no bloc event for it); failures throw `E_CUSTOM_DATA`.
   - Useful for firmware-driven provisioning metadata such as lock state or SoftAP password hints.
 
 ### Error Code Contract
 
-Native layers report stable error codes that the bloc maps into `EspProvisioningFailure`:
+The plugin reports stable error codes that the bloc maps into
+`EspProvisioningFailure`. Most come from the native layers;
+`E_INVALID_RESPONSE`, `E_TIMEOUT` and `E_UNKNOWN` are raised by the Dart layer:
 
 - `E0` (`EspProvisioningErrorCodes.missingArgument`)
 - `E1` (`EspProvisioningErrorCodes.wifiScanFailed`)
@@ -60,6 +73,14 @@ Native layers report stable error codes that the bloc maps into `EspProvisioning
 - `E_UNKNOWN`
 
 Import: `package:esp_provisioning_wifi/esp_provisioning_error_codes.dart`.
+
+Platform note: the granular provisioning codes (`E_PROV_SESSION`,
+`E_PROV_CONFIG`, `E_PROV_AUTH`, `E_PROV_NETWORK_NOT_FOUND`) are currently
+emitted by Android only. iOS reports provisioning failures as `E_PROV_FAILED`
+(`EspProvisioningFailure.provisioningFailed`) and rejects an incorrect proof of
+possession during the connect phase (`E_CONNECT`/`E_DEVICE`, mapped to
+`EspProvisioningFailure.platform`). `DEVICE_DISCONNECTED` is iOS-only;
+`E_DEVICE_NOT_FOUND` is Android-only.
 
 ## Migration (0.1.x -> 0.2.0)
 
@@ -114,15 +135,50 @@ BlocProvider(
 )
 ```
 
+Drive the flow by adding events (see `example/lib/main.dart` for a complete UI):
+
+```dart
+final bloc = context.read<EspProvisioningBloc>();
+
+// 1. Scan for BLE devices advertising the given name prefix
+//    ('PROV_' in the Espressif demos).
+bloc.add(const EspProvisioningEventStart('PROV_'));
+// -> status == bleScanned; pick a name from state.bluetoothDevices.
+
+// 2. Connect to the chosen device and scan its visible WiFi networks. The
+//    proof of possession must match the firmware ('abcd1234' in the demos).
+bloc.add(const EspProvisioningEventBleSelected('PROV_XXXXXX', 'abcd1234'));
+// -> status == wifiScanned; pick a network from state.wifiNetworks.
+
+// 3. Provision the chosen network.
+bloc.add(const EspProvisioningEventWifiSelected(
+    'PROV_XXXXXX', 'abcd1234', 'my-ssid', 'my-wifi-password'));
+// -> status == wifiProvisioned with state.wifiProvisioned == true on success.
+```
+
+### Device firmware requirements
+
+The ESP32 must run Espressif's BLE provisioning scheme (e.g. `wifi_prov_mgr`
+from ESP-IDF, or the Arduino `WiFiProv` demo) using **Security 1**, which
+requires a proof-of-possession (PoP) string. Pass the same PoP your firmware
+was configured with (the Espressif demos default to `abcd1234`, with device
+names prefixed `PROV_`). On Android a wrong PoP surfaces as `E_PROV_SESSION`
+(`EspProvisioningFailure.sessionFailed`); on iOS it fails during connect.
+Security 0 and Security 2 firmware are not currently supported.
+
 ## Requirements
+
+- Dart `^3.5.0`, Flutter `3.24+`.
+- If your app also depends on `permission_handler` directly, use `^12.x` — a
+  `^13.0.0` pin conflicts with this plugin's `^12.0.3` constraint.
 
 ### Android 6 (API level 23)+
 
-Make sure your `android/build.gradle` has 23+ here:
+Make sure your `android/app/build.gradle` has 23+ here:
 
 ```
 defaultConfig {
-    minSdkVersion 23
+    minSdkVersion Math.max(23, flutter.minSdkVersion)
 }
 ```
 
@@ -144,11 +200,29 @@ Bluetooth permissions are automatically requested by the library.
 
 ### iOS 13.0+
 
-
 Add this in your `ios/Runner/Info.plist`:
 ```
 <key>NSBluetoothAlwaysUsageDescription</key>
 <string>Our app uses bluetooth to find, connect and transfer data between different devices</string>
+```
+
+This package requests Bluetooth permission through `permission_handler`, whose
+iOS Bluetooth support is compiled out by default. Enable it in your
+`ios/Podfile` `post_install` hook, otherwise the permission request always
+fails and the provisioning flow never starts:
+
+```ruby
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    flutter_additional_ios_build_settings(target)
+    target.build_configurations.each do |config|
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= [
+        '$(inherited)',
+        'PERMISSION_BLUETOOTH=1',
+      ]
+    end
+  end
+end
 ```
 
 ## Notes
