@@ -43,3 +43,16 @@ jobs:
           cache: true
       - run: flutter build apk --debug
         working-directory: example
+
+  # The only place the Swift plugin is compiled; non-Mac dev machines cannot.
+  build-ios-example:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter build ios --debug --no-codesign
+        working-directory: example
