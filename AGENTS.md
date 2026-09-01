@@ -50,11 +50,10 @@ Use it to make safe, consistent changes quickly.
     resolved from `local.properties` `flutter.sdk`, then
     `FLUTTER_ROOT`/`FLUTTER_HOME`; the `where flutter` fallback in
     `android/build.gradle` is Windows-only.
-- Swift is NOT compiled by CI (Linux-only jobs) or on non-Mac dev machines.
-  Treat Swift edits as unverified: keep them minimal, mirror existing
-  patterns, and get a Mac run of `flutter build ios --no-codesign` in
-  `example/` (or `pod lib lint ios/esp_provisioning_wifi.podspec`) before a
-  release that touches iOS.
+- Swift compile check: only CI's `build-ios-example` job (macOS runner,
+  `flutter build ios --debug --no-codesign` in `example/`) compiles the Swift
+  plugin — non-Mac dev machines cannot. After any Swift edit, push and wait
+  for that job before considering the change verified.
 - End-to-end verification uses `example/` on a PHYSICAL device (`flutter run`
   from `example/`; emulators/simulators lack usable BLE) against an ESP32
   running Espressif BLE provisioning firmware with Security 1. The example
@@ -65,9 +64,10 @@ Use it to make safe, consistent changes quickly.
 ## CI
 - `.github/workflows/ci.yml` gates every push to master and every PR:
   `dart format --set-exit-if-changed lib test`, `flutter analyze`,
-  `flutter test` (root AND `example/`), `flutter pub publish --dry-run`, and
-  `flutter build apk --debug` in `example/` on JDK 17 (the only native
-  compile check). Replicate these locally before pushing.
+  `flutter test` (root AND `example/`), `flutter pub publish --dry-run`,
+  `flutter build apk --debug` in `example/` on JDK 17 (Kotlin compile check),
+  and `flutter build ios --debug --no-codesign` in `example/` on macOS (the
+  only Swift compile check). Replicate what you can locally before pushing.
 
 ## Preferred Tooling (Use Dart MCP First)
 When available, prefer Dart MCP tools over raw shell commands.
@@ -136,9 +136,10 @@ Fallback CLI commands:
 - Avoid stale data leaks: clear device/network scan caches before new scans.
 
 ### iOS Plugin Rules
-- Nothing compiles the Swift plugin automatically (no macOS CI job, and
-  non-Mac dev machines cannot build it) — see "Verifying Changes". Keep Swift
-  edits minimal and mirror existing patterns.
+- Only CI's macOS job compiles the Swift plugin (non-Mac dev machines cannot
+  build it) — see "Verifying Changes". Keep Swift edits minimal, mirror
+  existing patterns, and wait for that job before treating a change as
+  verified.
 - Avoid force-casts (`as!`) on method arguments.
 - Guard `result(...)` so it is invoked only once per method call.
 - Return early after error resolution to prevent duplicate responses.
