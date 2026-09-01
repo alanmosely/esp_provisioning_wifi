@@ -1,3 +1,8 @@
+## 0.2.1
+
+* Alpha: Clear the Android activity reference on lifecycle detach so a permission request can no longer be issued against a destroyed Activity (which left the method call unresolved and leaked the Activity); new checks now fail fast with `E_PERMISSION` while detached
+* Alpha: Fail pending Android permission callbacks on permanent activity detach (preserving them across configuration changes) and cancel in-flight BLE work on engine detach
+
 ## 0.2.0
 
 Breaking release, see the migration section in `README.md`.
