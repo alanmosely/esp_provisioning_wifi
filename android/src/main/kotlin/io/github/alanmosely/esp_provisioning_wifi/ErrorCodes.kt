@@ -1,4 +1,4 @@
-package how.virc.flutter_esp_ble_prov
+package io.github.alanmosely.esp_provisioning_wifi
 
 object ErrorCodes {
   const val MISSING_ARGUMENT = "E0"
@@ -11,4 +11,9 @@ object ErrorCodes {
   const val CUSTOM_DATA_FAILED = "E_CUSTOM_DATA"
   const val CANCELLED = "E_CANCELLED"
   const val PERMISSION_DENIED = "E_PERMISSION"
+  const val PROV_SESSION_FAILED = "E_PROV_SESSION"
+  const val PROV_CONFIG_FAILED = "E_PROV_CONFIG"
+  const val PROV_AUTH_FAILED = "E_PROV_AUTH"
+  const val PROV_NETWORK_NOT_FOUND = "E_PROV_NETWORK_NOT_FOUND"
+  const val PROV_FAILED = "E_PROV_FAILED"
 }

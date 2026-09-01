@@ -1,4 +1,4 @@
-#import "FlutterEspBleProvPlugin.h"
+#import "EspProvisioningWifiPlugin.h"
 #if __has_include(<esp_provisioning_wifi/esp_provisioning_wifi-Swift.h>)
 #import <esp_provisioning_wifi/esp_provisioning_wifi-Swift.h>
 #else
@@ -8,8 +8,8 @@
 #import "esp_provisioning_wifi-Swift.h"
 #endif
 
-@implementation FlutterEspBleProvPlugin
+@implementation EspProvisioningWifiPlugin
 + (void)registerWithRegistrar:(NSObject<FlutterPluginRegistrar>*)registrar {
-  [SwiftFlutterEspBleProvPlugin registerWithRegistrar:registrar];
+  [SwiftEspProvisioningWifiPlugin registerWithRegistrar:registrar];
 }
 @end

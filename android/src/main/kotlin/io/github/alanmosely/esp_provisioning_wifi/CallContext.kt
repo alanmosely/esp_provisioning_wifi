@@ -1,4 +1,4 @@
-package how.virc.flutter_esp_ble_prov
+package io.github.alanmosely.esp_provisioning_wifi
 
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel.Result

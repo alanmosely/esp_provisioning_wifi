@@ -1,10 +1,10 @@
 #
 # To learn more about a Podspec see http://guides.cocoapods.org/syntax/podspec.html.
-# Run `pod lib lint flutter_esp_ble_prov.podspec` to validate before publishing.
+# Run `pod lib lint esp_provisioning_wifi.podspec` to validate before publishing.
 #
 Pod::Spec.new do |s|
   s.name             = 'esp_provisioning_wifi'
-  s.version          = '0.1.2'
+  s.version          = '0.2.0'
   s.summary          = 'Provision ESP32 WiFi over BLE from Flutter.'
   s.description      = <<-DESC
 Flutter plugin and BLoC wrapper for provisioning ESP32 devices over BLE
@@ -20,6 +20,6 @@ using Espressif provisioning libraries.
 
   # Flutter.framework does not contain a i386 slice.
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES', 'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'i386' }
-  s.swift_version = '5.2'
-  s.dependency 'ESPProvision'
+  s.swift_version = '5.5'
+  s.dependency 'ESPProvision', '~> 3.0'
 end

@@ -1,4 +1,4 @@
-package how.virc.flutter_esp_ble_prov
+package io.github.alanmosely.esp_provisioning_wifi
 
 import android.app.Activity
 import android.content.Context
@@ -13,6 +13,7 @@ import com.espressif.provisioning.ESPProvisionManager
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel.Result
+import java.util.concurrent.atomic.AtomicInteger
 import org.greenrobot.eventbus.EventBus
 import org.greenrobot.eventbus.Subscribe
 import org.greenrobot.eventbus.ThreadMode
@@ -27,17 +28,12 @@ class Boss {
     const val DEFAULT_CONNECT_TIMEOUT_MS = 15000L
   }
 
-  private val logTag = "FlutterEspBleProv"
+  private val logTag = "EspProvisioningWifi"
 
   /**
    * The available scanned BLE devices.
    */
   val devices = mutableMapOf<String, BleConnector>()
-
-  /**
-   * The available WiFi networks for the most recently scanned BLE device.
-   */
-  val networks = mutableSetOf<String>()
 
   // Managers performing the various actions.
   private val permissionManager = PermissionManager(this)
@@ -52,6 +48,32 @@ class Boss {
   @Volatile private var currentOperationToken = 0
   @Volatile private var activeDevice: ESPDevice? = null
   @Volatile private var activeResolver: OperationResolver? = null
+
+  /**
+   * Disconnects initiated by the plugin itself on devices that may hold a live
+   * BLE link. DeviceConnectionEvent carries no device identity, so the connect
+   * subscriber consumes from this count to ignore stale DISCONNECTED events
+   * caused by a previous operation's asynchronous teardown, instead of failing
+   * the current attempt. Over-counting only degrades a fast-fail into the
+   * connect timeout; it never fails a healthy attempt.
+   */
+  private val selfInitiatedDisconnects = AtomicInteger(0)
+
+  fun noteSelfInitiatedDisconnect() {
+    selfInitiatedDisconnects.incrementAndGet()
+  }
+
+  fun consumeSelfInitiatedDisconnect(): Boolean {
+    while (true) {
+      val current = selfInitiatedDisconnects.get()
+      if (current <= 0) {
+        return false
+      }
+      if (selfInitiatedDisconnects.compareAndSet(current, current - 1)) {
+        return true
+      }
+    }
+  }
 
   val espManager: ESPProvisionManager
     get() = ESPProvisionManager.getInstance(platformContext)
@@ -110,7 +132,10 @@ class Boss {
   @Synchronized
   private fun disconnectActiveDeviceLocked() {
     try {
-      activeDevice?.disconnectDevice()
+      activeDevice?.let {
+        noteSelfInitiatedDisconnect()
+        it.disconnectDevice()
+      }
     } catch (e: Exception) {
       e("disconnectActiveDevice failed: $e")
     } finally {
@@ -183,6 +208,7 @@ class Boss {
             }
             if (!isOperationActive(operationToken)) {
               try {
+                noteSelfInitiatedDisconnect()
                 esp.disconnectDevice()
               } catch (e: Exception) {
                 e("disconnect cancelled connection failed: $e")
@@ -202,10 +228,14 @@ class Boss {
                 "ESP device reported a connection failure")
           }
           ESPConstants.EVENT_DEVICE_DISCONNECTED -> {
-            resolveConnectError(
-                ErrorCodes.CONNECT_FAILED,
-                "BLE device disconnected during connect",
-                "ESP device disconnected before the session was established")
+            if (consumeSelfInitiatedDisconnect()) {
+              d("ignoring DISCONNECTED event from self-initiated teardown")
+            } else {
+              resolveConnectError(
+                  ErrorCodes.CONNECT_FAILED,
+                  "BLE device disconnected during connect",
+                  "ESP device disconnected before the session was established")
+            }
           }
         }
       }

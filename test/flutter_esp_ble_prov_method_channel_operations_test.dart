@@ -1,9 +1,18 @@
+import 'package:esp_provisioning_wifi/esp_provisioning_error_codes.dart';
+import 'package:esp_provisioning_wifi/esp_wifi_network.dart';
 import 'package:esp_provisioning_wifi/src/flutter_esp_ble_prov/flutter_esp_ble_prov_method_channel.dart';
 import 'package:esp_provisioning_wifi/src/flutter_esp_ble_prov/flutter_esp_ble_prov_method_names.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  final Matcher throwsInvalidResponse = throwsA(
+    isA<PlatformException>().having(
+      (e) => e.code,
+      'code',
+      EspProvisioningErrorCodes.invalidResponse,
+    ),
+  );
   const MethodChannel channel =
       MethodChannel(FlutterEspBleProvMethodNames.channel);
   final MethodChannelFlutterEspBleProv platform =
@@ -39,18 +48,28 @@ void main() {
     expect(devices, <String>['PROV_01', 'PROV_02']);
   });
 
-  test('scanWifiNetworks forwards args and returns mapped list', () async {
+  test('scanWifiNetworks forwards args and returns typed networks', () async {
     handler = (MethodCall call) async {
       expect(call.method, FlutterEspBleProvMethodNames.scanWifiNetworks);
       expect(call.arguments, {
         'deviceName': 'PROV_01',
         'proofOfPossession': 'abcd1234',
       });
-      return <Object?>['home-wifi', 'office-wifi'];
+      return <Object?>[
+        <Object?, Object?>{'ssid': 'home-wifi', 'rssi': -45, 'security': 3},
+        <Object?, Object?>{'ssid': 'office-wifi'},
+      ];
     };
 
     final networks = await platform.scanWifiNetworks('PROV_01', 'abcd1234');
-    expect(networks, <String>['home-wifi', 'office-wifi']);
+    expect(networks, const <EspWifiNetwork>[
+      EspWifiNetwork(
+        ssid: 'home-wifi',
+        rssi: -45,
+        security: EspWifiSecurity.wpa2Psk,
+      ),
+      EspWifiNetwork(ssid: 'office-wifi'),
+    ]);
   });
 
   test('provisionWifi forwards args and returns plugin bool', () async {
@@ -148,7 +167,8 @@ void main() {
     expect(await platform.scanWifiNetworks('PROV_01', 'abcd1234'), isEmpty);
   });
 
-  test('scan methods throw when response contains non-string values', () async {
+  test('scan methods throw when response items have unexpected shapes',
+      () async {
     handler = (MethodCall call) async {
       if (call.method == FlutterEspBleProvMethodNames.scanBleDevices) {
         return <Object?>['ok', 1];
@@ -161,11 +181,24 @@ void main() {
 
     await expectLater(
       platform.scanBleDevices('PROV_'),
-      throwsA(isA<PlatformException>()),
+      throwsInvalidResponse,
     );
     await expectLater(
       platform.scanWifiNetworks('PROV_01', 'abcd1234'),
-      throwsA(isA<PlatformException>()),
+      throwsInvalidResponse,
+    );
+  });
+
+  test('scanWifiNetworks throws when a network map has no ssid', () async {
+    handler = (MethodCall call) async {
+      return <Object?>[
+        <Object?, Object?>{'rssi': -45},
+      ];
+    };
+
+    await expectLater(
+      platform.scanWifiNetworks('PROV_01', 'abcd1234'),
+      throwsInvalidResponse,
     );
   });
 

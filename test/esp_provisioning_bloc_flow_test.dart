@@ -8,7 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 class FakeProvisioningService extends FlutterEspBleProv {
   FakeProvisioningService({
     Future<List<String>> Function(String prefix)? scanBleDevicesHandler,
-    Future<List<String>> Function(String deviceName, String pop)?
+    Future<List<EspWifiNetwork>> Function(String deviceName, String pop)?
         scanWifiNetworksHandler,
     Future<bool> Function(
       String deviceName,
@@ -21,7 +21,7 @@ class FakeProvisioningService extends FlutterEspBleProv {
         _provisionWifiHandler = provisionWifiHandler;
 
   final Future<List<String>> Function(String prefix)? _scanBleDevicesHandler;
-  final Future<List<String>> Function(String deviceName, String pop)?
+  final Future<List<EspWifiNetwork>> Function(String deviceName, String pop)?
       _scanWifiNetworksHandler;
   final Future<bool> Function(
     String deviceName,
@@ -34,6 +34,8 @@ class FakeProvisioningService extends FlutterEspBleProv {
   int scanWifiNetworksCalls = 0;
   int provisionWifiCalls = 0;
   int cancelOperationsCalls = 0;
+  Duration? lastScanConnectTimeout;
+  Duration? lastProvisionConnectTimeout;
 
   @override
   Future<List<String>> scanBleDevices(String prefix) {
@@ -41,20 +43,21 @@ class FakeProvisioningService extends FlutterEspBleProv {
     if (_scanBleDevicesHandler == null) {
       return Future<List<String>>.value(const <String>[]);
     }
-    return _scanBleDevicesHandler!(prefix);
+    return _scanBleDevicesHandler(prefix);
   }
 
   @override
-  Future<List<String>> scanWifiNetworks(
+  Future<List<EspWifiNetwork>> scanWifiNetworks(
     String deviceName,
     String proofOfPossession, {
     Duration? connectTimeout,
   }) {
     scanWifiNetworksCalls++;
+    lastScanConnectTimeout = connectTimeout;
     if (_scanWifiNetworksHandler == null) {
-      return Future<List<String>>.value(const <String>[]);
+      return Future<List<EspWifiNetwork>>.value(const <EspWifiNetwork>[]);
     }
-    return _scanWifiNetworksHandler!(deviceName, proofOfPossession);
+    return _scanWifiNetworksHandler(deviceName, proofOfPossession);
   }
 
   @override
@@ -66,10 +69,11 @@ class FakeProvisioningService extends FlutterEspBleProv {
     Duration? connectTimeout,
   }) {
     provisionWifiCalls++;
+    lastProvisionConnectTimeout = connectTimeout;
     if (_provisionWifiHandler == null) {
       return Future<bool>.value(false);
     }
-    return _provisionWifiHandler!(
+    return _provisionWifiHandler(
       deviceName,
       proofOfPossession,
       ssid,
@@ -125,10 +129,11 @@ void main() {
   );
 
   blocTest<EspProvisioningBloc, EspProvisioningState>(
-    'emits timeout state and failure type when WiFi scan exceeds timeout',
+    'emits error status and timeout failure when WiFi scan exceeds timeout',
     build: () => EspProvisioningBloc(
       provisioningService: FakeProvisioningService(
-        scanWifiNetworksHandler: (_, __) => Completer<List<String>>().future,
+        scanWifiNetworksHandler: (_, __) =>
+            Completer<List<EspWifiNetwork>>().future,
       ),
       bluetoothPermissionRequest: () async => true,
       requestTimeout: const Duration(milliseconds: 10),
@@ -142,9 +147,9 @@ void main() {
         bluetoothDevice: 'PROV_1',
       ),
       EspProvisioningState(
-        status: EspProvisioningStatus.wifiScanned,
+        status: EspProvisioningStatus.error,
         bluetoothDevice: 'PROV_1',
-        wifiNetworks: const <String>[],
+        wifiNetworks: const <EspWifiNetwork>[],
         errorCode: EspProvisioningErrorCodes.timeout,
         errorDetails: 'scanWifiNetworks timeout after 0:00:00.010000',
         errorMsg: 'WiFi scan timed out',
@@ -191,7 +196,7 @@ void main() {
     'emits typed unknown failure when WiFi scan throws',
     build: () => EspProvisioningBloc(
       provisioningService: FakeProvisioningService(
-        scanWifiNetworksHandler: (_, __) => Future<List<String>>.error(
+        scanWifiNetworksHandler: (_, __) => Future<List<EspWifiNetwork>>.error(
           Exception('scan failed'),
         ),
       ),
@@ -219,7 +224,7 @@ void main() {
     'emits cancelled failure for cancelled platform operations',
     build: () => EspProvisioningBloc(
       provisioningService: FakeProvisioningService(
-        scanWifiNetworksHandler: (_, __) => Future<List<String>>.error(
+        scanWifiNetworksHandler: (_, __) => Future<List<EspWifiNetwork>>.error(
           PlatformException(
             code: EspProvisioningErrorCodes.cancelled,
             message: 'Operation cancelled',
@@ -286,10 +291,10 @@ void main() {
         scanWifiNetworksHandler: (deviceName, _) async {
           if (deviceName == 'first') {
             await Future<void>.delayed(const Duration(milliseconds: 80));
-            return const <String>['old-network'];
+            return const <EspWifiNetwork>[EspWifiNetwork(ssid: 'old-network')];
           }
           await Future<void>.delayed(const Duration(milliseconds: 10));
-          return const <String>['new-network'];
+          return const <EspWifiNetwork>[EspWifiNetwork(ssid: 'new-network')];
         },
       ),
       bluetoothPermissionRequest: () async => true,
@@ -313,9 +318,142 @@ void main() {
       EspProvisioningState(
         status: EspProvisioningStatus.wifiScanned,
         bluetoothDevice: 'second',
-        wifiNetworks: const <String>['new-network'],
+        wifiNetworks: const <EspWifiNetwork>[
+          EspWifiNetwork(ssid: 'new-network'),
+        ],
       ),
     ],
+  );
+
+  blocTest<EspProvisioningBloc, EspProvisioningState>(
+    'stale timed-out handler does not cancel a newer operation',
+    build: () => EspProvisioningBloc(
+      provisioningService: FakeProvisioningService(
+        scanWifiNetworksHandler: (deviceName, _) {
+          if (deviceName == 'stale') {
+            // Simulates a cancelled native call that never resolves.
+            return Completer<List<EspWifiNetwork>>().future;
+          }
+          return Future<List<EspWifiNetwork>>.delayed(
+            const Duration(milliseconds: 20),
+            () => const <EspWifiNetwork>[EspWifiNetwork(ssid: 'fresh-net')],
+          );
+        },
+      ),
+      bluetoothPermissionRequest: () async => true,
+      requestTimeout: const Duration(milliseconds: 40),
+    ),
+    act: (bloc) async {
+      bloc.add(const EspProvisioningEventBleSelected('stale', 'pop'));
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      bloc.add(const EspProvisioningEventBleSelected('fresh', 'pop'));
+    },
+    wait: const Duration(milliseconds: 120),
+    expect: () => <EspProvisioningState>[
+      EspProvisioningState(
+        status: EspProvisioningStatus.deviceChosen,
+        bluetoothDevice: 'stale',
+      ),
+      EspProvisioningState(
+        status: EspProvisioningStatus.deviceChosen,
+        bluetoothDevice: 'fresh',
+      ),
+      EspProvisioningState(
+        status: EspProvisioningStatus.wifiScanned,
+        bluetoothDevice: 'fresh',
+        wifiNetworks: const <EspWifiNetwork>[EspWifiNetwork(ssid: 'fresh-net')],
+      ),
+    ],
+    verify: (bloc) {
+      final service = bloc.espProvisioningService as FakeProvisioningService;
+      // One cancel per handler start; the stale handler's late timeout must
+      // not add a third cancel against the newer operation.
+      expect(service.cancelOperationsCalls, 2);
+    },
+  );
+
+  for (final entry in <String, EspProvisioningFailure>{
+    EspProvisioningErrorCodes.provisioningSessionFailed:
+        EspProvisioningFailure.sessionFailed,
+    EspProvisioningErrorCodes.provisioningAuthFailed:
+        EspProvisioningFailure.authenticationFailed,
+    EspProvisioningErrorCodes.provisioningNetworkNotFound:
+        EspProvisioningFailure.networkNotFound,
+    EspProvisioningErrorCodes.provisioningConfigFailed:
+        EspProvisioningFailure.provisioningFailed,
+    EspProvisioningErrorCodes.provisioningFailed:
+        EspProvisioningFailure.provisioningFailed,
+    EspProvisioningErrorCodes.connectTimeout: EspProvisioningFailure.timeout,
+  }.entries) {
+    blocTest<EspProvisioningBloc, EspProvisioningState>(
+      'maps native ${entry.key} to ${entry.value}',
+      build: () => EspProvisioningBloc(
+        provisioningService: FakeProvisioningService(
+          provisionWifiHandler: (_, __, ___, ____) => Future<bool>.error(
+            PlatformException(code: entry.key, message: 'native failure'),
+          ),
+        ),
+        bluetoothPermissionRequest: () async => true,
+        requestTimeout: const Duration(milliseconds: 250),
+      ),
+      act: (bloc) => bloc.add(const EspProvisioningEventWifiSelected(
+        'PROV_1',
+        'abcd1234',
+        'home-wifi',
+        'wrong-password',
+      )),
+      expect: () => <EspProvisioningState>[
+        EspProvisioningState(
+          status: EspProvisioningStatus.networkChosen,
+          wifiNetwork: 'home-wifi',
+        ),
+        EspProvisioningState(
+          status: EspProvisioningStatus.error,
+          wifiNetwork: 'home-wifi',
+          errorCode: entry.key,
+          errorMsg: 'native failure',
+          failure: entry.value,
+        ),
+      ],
+    );
+  }
+
+  blocTest<EspProvisioningBloc, EspProvisioningState>(
+    'forwards the configured connectTimeout to native scan and provision',
+    build: () => EspProvisioningBloc(
+      provisioningService: FakeProvisioningService(),
+      bluetoothPermissionRequest: () async => true,
+      connectTimeout: const Duration(seconds: 5),
+    ),
+    act: (bloc) async {
+      bloc.add(const EspProvisioningEventBleSelected('PROV_1', 'pop'));
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      bloc.add(const EspProvisioningEventWifiSelected(
+        'PROV_1',
+        'pop',
+        'home-wifi',
+        'secret',
+      ));
+    },
+    verify: (bloc) {
+      final service = bloc.espProvisioningService as FakeProvisioningService;
+      expect(service.lastScanConnectTimeout, const Duration(seconds: 5));
+      expect(service.lastProvisionConnectTimeout, const Duration(seconds: 5));
+    },
+  );
+
+  blocTest<EspProvisioningBloc, EspProvisioningState>(
+    'defaults the native connectTimeout to kEspDefaultConnectTimeout',
+    build: () => EspProvisioningBloc(
+      provisioningService: FakeProvisioningService(),
+      bluetoothPermissionRequest: () async => true,
+    ),
+    act: (bloc) =>
+        bloc.add(const EspProvisioningEventBleSelected('PROV_1', 'pop')),
+    verify: (bloc) {
+      final service = bloc.espProvisioningService as FakeProvisioningService;
+      expect(service.lastScanConnectTimeout, kEspDefaultConnectTimeout);
+    },
   );
 
   blocTest<EspProvisioningBloc, EspProvisioningState>(

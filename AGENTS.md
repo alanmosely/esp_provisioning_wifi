@@ -67,10 +67,10 @@ Fallback CLI commands:
 - Keep method names and argument keys aligned across:
   - Dart channel wrapper: `lib/src/flutter_esp_ble_prov/flutter_esp_ble_prov_method_channel.dart`
   - Dart method/key constants: `lib/src/flutter_esp_ble_prov/flutter_esp_ble_prov_method_names.dart`
-  - Android plugin entry: `android/src/main/kotlin/.../FlutterEspBleProvPlugin.kt`
+  - Android plugin entry: `android/src/main/kotlin/.../EspProvisioningWifiPlugin.kt`
   - Android method/key constants: `android/src/main/kotlin/.../MethodNames.kt`
   - Android error constants: `android/src/main/kotlin/.../ErrorCodes.kt`
-  - iOS plugin: `ios/Classes/SwiftFlutterEspBleProvPlugin.swift`
+  - iOS plugin: `ios/Classes/SwiftEspProvisioningWifiPlugin.swift`
 - On missing/invalid args, return a proper `FlutterError`/`result.error`, do not crash.
 
 ### Android Plugin Rules

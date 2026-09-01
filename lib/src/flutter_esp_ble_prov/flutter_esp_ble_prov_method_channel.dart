@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:esp_provisioning_wifi/esp_provisioning_error_codes.dart';
+import 'package:esp_provisioning_wifi/esp_wifi_network.dart';
 
 import 'flutter_esp_ble_prov_method_names.dart';
 import 'flutter_esp_ble_prov_platform_interface.dart';
@@ -33,7 +34,7 @@ class MethodChannelFlutterEspBleProv extends FlutterEspBleProvPlatform {
   }
 
   @override
-  Future<List<String>> scanWifiNetworks(
+  Future<List<EspWifiNetwork>> scanWifiNetworks(
     String deviceName,
     String proofOfPossession, {
     Duration? connectTimeout,
@@ -49,7 +50,7 @@ class MethodChannelFlutterEspBleProv extends FlutterEspBleProvPlatform {
       FlutterEspBleProvMethodNames.scanWifiNetworks,
       args,
     );
-    return _decodeStringList(
+    return _decodeNetworkList(
       methodName: FlutterEspBleProvMethodNames.scanWifiNetworks,
       raw: raw,
     );
@@ -127,5 +128,27 @@ class MethodChannelFlutterEspBleProv extends FlutterEspBleProvPlatform {
       }
     }
     return List<String>.from(raw);
+  }
+
+  List<EspWifiNetwork> _decodeNetworkList({
+    required String methodName,
+    required List<Object?>? raw,
+  }) {
+    if (raw == null) {
+      return const <EspWifiNetwork>[];
+    }
+    final networks = <EspWifiNetwork>[];
+    for (final item in raw) {
+      if (item is! Map<Object?, Object?> || item['ssid'] is! String) {
+        throw PlatformException(
+          code: EspProvisioningErrorCodes.invalidResponse,
+          message: 'Invalid response type from $methodName',
+          details:
+              'Expected a list of network maps with an ssid string from platform channel.',
+        );
+      }
+      networks.add(EspWifiNetwork.fromMap(item));
+    }
+    return networks;
   }
 }

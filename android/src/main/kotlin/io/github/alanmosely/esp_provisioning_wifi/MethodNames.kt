@@ -1,7 +1,7 @@
-package how.virc.flutter_esp_ble_prov
+package io.github.alanmosely.esp_provisioning_wifi
 
 object MethodNames {
-  const val CHANNEL = "flutter_esp_ble_prov"
+  const val CHANNEL = "esp_provisioning_wifi"
   const val GET_PLATFORM_VERSION = "getPlatformVersion"
   const val SCAN_BLE_DEVICES = "scanBleDevices"
   const val SCAN_WIFI_NETWORKS = "scanWifiNetworks"

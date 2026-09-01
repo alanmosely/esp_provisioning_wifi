@@ -1,28 +1,31 @@
 name: esp_provisioning_wifi
 description: Provision WiFi on Espressif ESP32 devices over Bluetooth LE from Flutter,
   with a Bloc API and native Android and iOS provisioning implementations.
-version: 0.1.2
+version: 0.2.0
 repository: https://github.com/alanmosely/esp_provisioning_wifi
 issue_tracker: https://github.com/alanmosely/esp_provisioning_wifi/issues
 
 environment:
-  sdk: ">=2.19.2 <4.0.0"
-  flutter: ">=2.5.0"
+  sdk: ^3.5.0
+  flutter: ">=3.24.0"
 
 dependencies:
   flutter:
     sdk: flutter
-  flutter_bloc: ^8.1.6
-  bloc_concurrency: ^0.2.5
-  equatable: ^2.0.7
-  plugin_platform_interface: ^2.0.2
-  permission_handler: ^11.4.0
+  flutter_bloc: ^9.1.1
+  bloc_concurrency: ^0.3.0
+  equatable: ^2.1.0
+  plugin_platform_interface: ^2.1.8
+  # permission_handler 13 requires permission_handler_android 14, which needs
+  # AGP 9 / Kotlin 2.3 / compileSdk 37 - beyond current stable Flutter
+  # toolchains. Stay on 12.x until that toolchain is mainstream.
+  permission_handler: ^12.0.3
 
 dev_dependencies:
-  bloc_test: ^9.1.7
+  bloc_test: ^10.0.0
   flutter_test:
     sdk: flutter
-  flutter_lints: ^2.0.3
+  flutter_lints: ^6.0.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -42,10 +45,10 @@ flutter:
   plugin:
     platforms:
       android:
-        package: how.virc.flutter_esp_ble_prov
-        pluginClass: FlutterEspBleProvPlugin
+        package: io.github.alanmosely.esp_provisioning_wifi
+        pluginClass: EspProvisioningWifiPlugin
       ios:
-        pluginClass: FlutterEspBleProvPlugin
+        pluginClass: EspProvisioningWifiPlugin
 
   # To add assets to your plugin package, add an assets section, like this:
   # assets:

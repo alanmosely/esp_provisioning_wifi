@@ -5,7 +5,7 @@ import 'package:esp_provisioning_wifi/esp_provisioning_wifi.dart';
 
 class _FakeProvisioningService extends FlutterEspBleProv {
   _FakeProvisioningService({
-    Future<List<String>> Function(String deviceName, String pop)?
+    Future<List<EspWifiNetwork>> Function(String deviceName, String pop)?
         scanWifiNetworksHandler,
     Future<bool> Function(
       String deviceName,
@@ -16,7 +16,7 @@ class _FakeProvisioningService extends FlutterEspBleProv {
   })  : _scanWifiNetworksHandler = scanWifiNetworksHandler,
         _provisionWifiHandler = provisionWifiHandler;
 
-  final Future<List<String>> Function(String deviceName, String pop)?
+  final Future<List<EspWifiNetwork>> Function(String deviceName, String pop)?
       _scanWifiNetworksHandler;
   final Future<bool> Function(
     String deviceName,
@@ -29,15 +29,15 @@ class _FakeProvisioningService extends FlutterEspBleProv {
   Future<bool> cancelOperations() => Future<bool>.value(true);
 
   @override
-  Future<List<String>> scanWifiNetworks(
+  Future<List<EspWifiNetwork>> scanWifiNetworks(
     String deviceName,
     String proofOfPossession, {
     Duration? connectTimeout,
   }) {
     if (_scanWifiNetworksHandler == null) {
-      return Future<List<String>>.value(const <String>[]);
+      return Future<List<EspWifiNetwork>>.value(const <EspWifiNetwork>[]);
     }
-    return _scanWifiNetworksHandler!(deviceName, proofOfPossession);
+    return _scanWifiNetworksHandler(deviceName, proofOfPossession);
   }
 
   @override
@@ -51,7 +51,7 @@ class _FakeProvisioningService extends FlutterEspBleProv {
     if (_provisionWifiHandler == null) {
       return Future<bool>.value(false);
     }
-    return _provisionWifiHandler!(
+    return _provisionWifiHandler(
       deviceName,
       proofOfPossession,
       ssid,
@@ -65,7 +65,8 @@ void main() {
     'emits deviceChosen when ble selection starts',
     build: () => EspProvisioningBloc(
       provisioningService: _FakeProvisioningService(
-        scanWifiNetworksHandler: (_, __) => Completer<List<String>>().future,
+        scanWifiNetworksHandler: (_, __) =>
+            Completer<List<EspWifiNetwork>>().future,
       ),
       bluetoothPermissionRequest: () async => true,
       requestTimeout: const Duration(milliseconds: 250),

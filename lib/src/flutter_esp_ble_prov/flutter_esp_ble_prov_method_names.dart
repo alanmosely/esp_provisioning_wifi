@@ -2,7 +2,7 @@
 class FlutterEspBleProvMethodNames {
   FlutterEspBleProvMethodNames._();
 
-  static const String channel = 'flutter_esp_ble_prov';
+  static const String channel = 'esp_provisioning_wifi';
   static const String getPlatformVersion = 'getPlatformVersion';
   static const String scanBleDevices = 'scanBleDevices';
   static const String scanWifiNetworks = 'scanWifiNetworks';

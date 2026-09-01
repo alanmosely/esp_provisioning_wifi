@@ -12,10 +12,11 @@ private enum ErrorCodes {
     static let customData = "E_CUSTOM_DATA"
     static let cancelled = "E_CANCELLED"
     static let connectTimeout = "E_CONNECT_TIMEOUT"
+    static let provisionFailed = "E_PROV_FAILED"
 }
 
 private enum MethodNames {
-    static let channel = "flutter_esp_ble_prov"
+    static let channel = "esp_provisioning_wifi"
     static let getPlatformVersion = "getPlatformVersion"
     static let scanBleDevices = "scanBleDevices"
     static let scanWifiNetworks = "scanWifiNetworks"
@@ -86,12 +87,12 @@ private final class ProvisionOperationCoordinator {
     }
 }
 
-public class SwiftFlutterEspBleProvPlugin: NSObject, FlutterPlugin {
+public class SwiftEspProvisioningWifiPlugin: NSObject, FlutterPlugin {
     private let coordinator = ProvisionOperationCoordinator()
-    
+
     public static func register(with registrar: FlutterPluginRegistrar) {
         let channel = FlutterMethodChannel(name: MethodNames.channel, binaryMessenger: registrar.messenger())
-        let instance = SwiftFlutterEspBleProvPlugin()
+        let instance = SwiftEspProvisioningWifiPlugin()
         registrar.addMethodCallDelegate(instance, channel: channel)
     }
     
@@ -288,7 +289,10 @@ private class BLEProvisionService: ProvisionService {
                     self.disconnect(device: device)
                     return
                 }
-                self.resolve((wifiList ?? []).map({(networks: ESPWifiNetwork) -> String in return networks.ssid}))
+                // rssi/security enrichment is pending; Dart treats missing keys as null.
+                self.resolve((wifiList ?? []).map({ (network: ESPWifiNetwork) -> [String: Any] in
+                    return ["ssid": network.ssid]
+                }))
                 self.disconnect(device: device)
             }
         }
@@ -309,9 +313,9 @@ private class BLEProvisionService: ProvisionService {
                     self.disconnect(device: device)
                 case .configApplied:
                     NSLog("Wi-Fi config applied")
-                case .failure:
+                case .failure(let error):
                     NSLog("Device provisioning failed")
-                    self.resolve(false)
+                    self.fail(error: error, code: ErrorCodes.provisionFailed)
                     self.disconnect(device: device)
                 }
             }

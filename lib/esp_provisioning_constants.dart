@@ -1,4 +1,6 @@
-// ignore_for_file: constant_identifier_names
+/// Default BLE connect timeout applied to native scan/provision calls.
+const Duration kEspDefaultConnectTimeout = Duration(seconds: 15);
 
-/// Time before a request to the FlutterEspBleProv plugin times out, in seconds
-const TIMEOUT = 20;
+/// Default additional budget allowed for the post-connect phase of an
+/// operation (WiFi scan, provisioning exchange, custom data read).
+const Duration kEspDefaultOperationBudget = Duration(seconds: 20);

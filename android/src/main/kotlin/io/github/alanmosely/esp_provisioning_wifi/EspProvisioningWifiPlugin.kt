@@ -1,4 +1,4 @@
-package how.virc.flutter_esp_ble_prov
+package io.github.alanmosely.esp_provisioning_wifi
 
 import android.content.Intent
 import android.util.Log
@@ -11,13 +11,13 @@ import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
 import io.flutter.plugin.common.PluginRegistry
 
-/** FlutterEspBleProvPlugin */
-class FlutterEspBleProvPlugin :
+/** EspProvisioningWifiPlugin */
+class EspProvisioningWifiPlugin :
     FlutterPlugin,
     MethodCallHandler,
     ActivityAware,
     PluginRegistry.ActivityResultListener {
-  private val logTag = "FlutterEspBleProvChannel"
+  private val logTag = "EspProvisioningWifi"
   private val boss = Boss()
   private lateinit var channel: MethodChannel
   private var activityBinding: ActivityPluginBinding? = null

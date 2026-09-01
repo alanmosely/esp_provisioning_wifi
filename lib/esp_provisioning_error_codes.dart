@@ -44,6 +44,22 @@ class EspProvisioningErrorCodes {
   /// Custom provisioning endpoint request failed.
   static const String customData = 'E_CUSTOM_DATA';
 
+  /// Provisioning session could not be established (often wrong proof of
+  /// possession).
+  static const String provisioningSessionFailed = 'E_PROV_SESSION';
+
+  /// WiFi configuration could not be sent or applied.
+  static const String provisioningConfigFailed = 'E_PROV_CONFIG';
+
+  /// Device rejected the WiFi passphrase.
+  static const String provisioningAuthFailed = 'E_PROV_AUTH';
+
+  /// Device could not find the target WiFi network.
+  static const String provisioningNetworkNotFound = 'E_PROV_NETWORK_NOT_FOUND';
+
+  /// Provisioning failed for another or unknown reason.
+  static const String provisioningFailed = 'E_PROV_FAILED';
+
   /// iOS device creation failure.
   static const String iosDeviceCreate = 'E_DEVICE';
 

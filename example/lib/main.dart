@@ -45,45 +45,9 @@ class _MyAppViewState extends State<MyAppView> {
     });
   }
 
-  String _statusLabel(EspProvisioningStatus status) {
-    switch (status) {
-      case EspProvisioningStatus.initial:
-        return 'initial';
-      case EspProvisioningStatus.bleScanned:
-        return 'bleScanned';
-      case EspProvisioningStatus.deviceChosen:
-        return 'deviceChosen';
-      case EspProvisioningStatus.wifiScanned:
-        return 'wifiScanned';
-      case EspProvisioningStatus.networkChosen:
-        return 'networkChosen';
-      case EspProvisioningStatus.wifiProvisioned:
-        return 'wifiProvisioned';
-      case EspProvisioningStatus.error:
-        return 'error';
-    }
-  }
+  String _statusLabel(EspProvisioningStatus status) => status.name;
 
-  String _failureLabel(EspProvisioningFailure failure) {
-    switch (failure) {
-      case EspProvisioningFailure.none:
-        return 'none';
-      case EspProvisioningFailure.permissionDenied:
-        return 'permissionDenied';
-      case EspProvisioningFailure.timeout:
-        return 'timeout';
-      case EspProvisioningFailure.cancelled:
-        return 'cancelled';
-      case EspProvisioningFailure.deviceNotFound:
-        return 'deviceNotFound';
-      case EspProvisioningFailure.invalidResponse:
-        return 'invalidResponse';
-      case EspProvisioningFailure.platform:
-        return 'platform';
-      case EspProvisioningFailure.unknown:
-        return 'unknown';
-    }
-  }
+  String _failureLabel(EspProvisioningFailure failure) => failure.name;
 
   void _onStateChanged(EspProvisioningState state) {
     switch (state.status) {
@@ -282,26 +246,29 @@ class _MyAppViewState extends State<MyAppView> {
                     child: ListView.builder(
                       itemCount: state.wifiNetworks.length,
                       itemBuilder: (context, i) {
+                        final network = state.wifiNetworks[i];
                         return ListTile(
                           title: Text(
-                            state.wifiNetworks[i],
+                            network.ssid,
                             style: TextStyle(
                               color: Colors.green.shade700,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
+                          trailing: network.rssi == null
+                              ? null
+                              : Text('${network.rssi} dBm'),
                           onTap: () {
-                            final wifiNetwork = state.wifiNetworks[i];
                             context.read<EspProvisioningBloc>().add(
                                   EspProvisioningEventWifiSelected(
                                     state.bluetoothDevice,
                                     proofOfPossessionController.text,
-                                    wifiNetwork,
+                                    network.ssid,
                                     passphraseController.text,
                                   ),
                                 );
                             pushFeedback(
-                              'Provisioning $wifiNetwork on ${state.bluetoothDevice}...',
+                              'Provisioning ${network.ssid} on ${state.bluetoothDevice}...',
                             );
                           },
                         );

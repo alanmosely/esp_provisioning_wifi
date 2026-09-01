@@ -1,4 +1,4 @@
-group 'how.virc.flutter_esp_ble_prov'
+group 'io.github.alanmosely.esp_provisioning_wifi'
 version '1.0-SNAPSHOT'
 
 import java.util.Properties
@@ -51,17 +51,17 @@ def flutterJar = flutterSdkPath == null
         : new File(flutterSdkPath, 'bin/cache/artifacts/engine/android-x64/flutter.jar')
 
 android {
-    namespace "how.virc.flutter_esp_ble_prov"
+    namespace "io.github.alanmosely.esp_provisioning_wifi"
 
     compileSdkVersion 34
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
     }
 
     kotlinOptions {
-        jvmTarget = '1.8'
+        jvmTarget = '11'
     }
 
     sourceSets {

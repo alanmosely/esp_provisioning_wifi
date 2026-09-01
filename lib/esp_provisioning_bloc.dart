@@ -11,6 +11,7 @@ import 'esp_provisioning_error_codes.dart';
 import 'esp_provisioning_event.dart';
 import 'esp_provisioning_service.dart';
 import 'esp_provisioning_state.dart';
+import 'esp_wifi_network.dart';
 import 'src/flutter_esp_ble_prov/flutter_esp_ble_prov.dart';
 
 /// The EspProvisioningBloc class is a BLoC that handles EspProvisioningEvents and emits
@@ -20,11 +21,15 @@ class EspProvisioningBloc
   EspProvisioningBloc({
     FlutterEspBleProv? provisioningService,
     Future<bool> Function()? bluetoothPermissionRequest,
+    Duration? connectTimeout,
     Duration? requestTimeout,
   })  : espProvisioningService =
             provisioningService ?? EspProvisioningService(),
         _bluetoothPermissionRequest = bluetoothPermissionRequest,
-        _requestTimeout = requestTimeout ?? const Duration(seconds: TIMEOUT),
+        _connectTimeout = connectTimeout ?? kEspDefaultConnectTimeout,
+        _requestTimeout = requestTimeout ??
+            (connectTimeout ?? kEspDefaultConnectTimeout) +
+                kEspDefaultOperationBudget,
         super(EspProvisioningState()) {
     on<EspProvisioningEventStart>(
       _onStart,
@@ -46,14 +51,21 @@ class EspProvisioningBloc
   /// Override for tests where permission_handler is unavailable.
   final Future<bool> Function()? _bluetoothPermissionRequest;
 
-  /// Timeout to apply to scan/provision calls.
+  /// Timeout for the native BLE connect phase of an operation.
+  final Duration _connectTimeout;
+
+  /// Overall timeout for a scan/provision call (connect + operation phases).
   final Duration _requestTimeout;
+
+  /// Monotonic counter identifying the latest operation; a stale handler's
+  /// timeout must not cancel a newer operation's native work.
+  int _operationEpoch = 0;
 
   /// _onStart() is a function that is called when the EspProvisioningEventStart event is emitted
   ///
   /// Args:
   ///   event (EspProvisioningEventStart): This is the event that was emitted by the UI
-  ///   emit (Emitter<EspProvisioningState>): This is the function that you use to emit a new state
+  ///   emit (`Emitter<EspProvisioningState>`): This is the function that you use to emit a new state
   Future<void> _onStart(
     EspProvisioningEventStart event,
     Emitter<EspProvisioningState> emit,
@@ -61,7 +73,7 @@ class EspProvisioningBloc
     try {
       final bool bluetoothIsGranted;
       if (_bluetoothPermissionRequest != null) {
-        bluetoothIsGranted = await _bluetoothPermissionRequest!();
+        bluetoothIsGranted = await _bluetoothPermissionRequest();
       } else {
         bluetoothIsGranted = await requestBluetoothPermission();
       }
@@ -106,7 +118,7 @@ class EspProvisioningBloc
   ///
   /// Args:
   ///   event (EspProvisioningEventBleSelected): This is the event that was emitted by the UI
-  ///   emit (Emitter<EspProvisioningState>): This is the function that you use to emit a new state
+  ///   emit (`Emitter<EspProvisioningState>`): This is the function that you use to emit a new state
   Future<void> _onBleSelected(
     EspProvisioningEventBleSelected event,
     Emitter<EspProvisioningState> emit,
@@ -126,13 +138,13 @@ class EspProvisioningBloc
         status: EspProvisioningStatus.deviceChosen,
         bluetoothDevice: event.bluetoothDevice,
       );
-      final timedScan = await _runWithTimeout<List<String>>(
+      final timedScan = await _runWithTimeout<List<EspWifiNetwork>>(
         () => espProvisioningService.scanWifiNetworks(
           event.bluetoothDevice,
           event.proofOfPossession,
-          connectTimeout: _requestTimeout,
+          connectTimeout: _connectTimeout,
         ),
-        const <String>[],
+        const <EspWifiNetwork>[],
       );
       _emitStateWithTimeoutResult(
         emit,
@@ -153,7 +165,7 @@ class EspProvisioningBloc
   ///
   /// Args:
   ///   event (EspProvisioningEventWifiSelected): This is the event that was emitted by the UI
-  ///   emit (Emitter<EspProvisioningState>): This is the function that you use to emit a new state
+  ///   emit (`Emitter<EspProvisioningState>`): This is the function that you use to emit a new state
   Future<void> _onWifiSelected(
     EspProvisioningEventWifiSelected event,
     Emitter<EspProvisioningState> emit,
@@ -171,7 +183,7 @@ class EspProvisioningBloc
           event.proofOfPossession,
           event.wifiNetwork,
           event.password,
-          connectTimeout: _requestTimeout,
+          connectTimeout: _connectTimeout,
         ),
         false,
       );
@@ -226,6 +238,15 @@ class EspProvisioningBloc
           return EspProvisioningFailure.deviceNotFound;
         case EspProvisioningErrorCodes.invalidResponse:
           return EspProvisioningFailure.invalidResponse;
+        case EspProvisioningErrorCodes.provisioningSessionFailed:
+          return EspProvisioningFailure.sessionFailed;
+        case EspProvisioningErrorCodes.provisioningAuthFailed:
+          return EspProvisioningFailure.authenticationFailed;
+        case EspProvisioningErrorCodes.provisioningNetworkNotFound:
+          return EspProvisioningFailure.networkNotFound;
+        case EspProvisioningErrorCodes.provisioningConfigFailed:
+        case EspProvisioningErrorCodes.provisioningFailed:
+          return EspProvisioningFailure.provisioningFailed;
         default:
           return EspProvisioningFailure.platform;
       }
@@ -261,6 +282,7 @@ class EspProvisioningBloc
   }
 
   Future<void> _cancelOperations() async {
+    _operationEpoch++;
     await espProvisioningService.cancelOperations();
   }
 
@@ -269,7 +291,7 @@ class EspProvisioningBloc
     required EspProvisioningStatus status,
     List<String>? bluetoothDevices,
     String? bluetoothDevice,
-    List<String>? wifiNetworks,
+    List<EspWifiNetwork>? wifiNetworks,
     String? wifiNetwork,
     bool? wifiProvisioned,
   }) {
@@ -294,7 +316,7 @@ class EspProvisioningBloc
     required EspProvisioningStatus status,
     List<String>? bluetoothDevices,
     String? bluetoothDevice,
-    List<String>? wifiNetworks,
+    List<EspWifiNetwork>? wifiNetworks,
     String? wifiNetwork,
     bool? wifiProvisioned,
     required bool timedOut,
@@ -303,7 +325,7 @@ class EspProvisioningBloc
   }) {
     emit(
       state.copyWith(
-        status: status,
+        status: timedOut ? EspProvisioningStatus.error : status,
         bluetoothDevices: bluetoothDevices,
         bluetoothDevice: bluetoothDevice,
         wifiNetworks: wifiNetworks,
@@ -340,6 +362,7 @@ class EspProvisioningBloc
     Future<T> Function() action,
     T timeoutValue,
   ) async {
+    final epoch = _operationEpoch;
     var timedOut = false;
     final value = await action().timeout(
       _requestTimeout,
@@ -348,7 +371,7 @@ class EspProvisioningBloc
         return timeoutValue;
       },
     );
-    if (timedOut) {
+    if (timedOut && epoch == _operationEpoch) {
       try {
         await espProvisioningService.cancelOperations();
       } on Object catch (_) {

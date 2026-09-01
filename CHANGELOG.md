@@ -1,3 +1,17 @@
+## 0.2.0
+
+Breaking release, see the migration section in `README.md`.
+
+* Alpha: Rename the method channel to `esp_provisioning_wifi` and the native plugin package/classes (`io.github.alanmosely.esp_provisioning_wifi`, `EspProvisioningWifiPlugin`) so the plugin no longer collides with the upstream `flutter_esp_ble_prov` package
+* Alpha: `scanWifiNetworks` now returns `List<EspWifiNetwork>` (`ssid`, `rssi`, `security`) instead of `List<String>`; `rssi`/`security` are populated on Android and pending on iOS
+* Alpha: Provisioning failures now reject with typed error codes (`E_PROV_SESSION`, `E_PROV_CONFIG`, `E_PROV_AUTH`, `E_PROV_NETWORK_NOT_FOUND`, `E_PROV_FAILED`) mapped to new `EspProvisioningFailure` values, instead of resolving `false`
+* Alpha: Split BLoC timeouts into `connectTimeout` (BLE connect phase, default 15s) and `requestTimeout` (overall, default connect + 20s), replacing the single `TIMEOUT` constant
+* Alpha: Timeouts now emit `status: EspProvisioningStatus.error` alongside `failure: timeout`
+* Alpha: Deduplicate Android WiFi scan results by SSID, keeping the strongest signal per network
+* Alpha: Pin the iOS `ESPProvision` dependency to `~> 3.0` and raise Android Java/Kotlin targets to 11
+* Alpha: Upgrade to flutter_bloc 9, bloc_concurrency 0.3, permission_handler 12, flutter_lints 6; require Dart `^3.5.0` and Flutter `>=3.24.0` (permission_handler 13 is deferred until its AGP 9 / compileSdk 37 toolchain requirements are mainstream)
+* Alpha: Add GitHub Actions CI (format, analyze, test, publish dry-run, Android example build)
+
 ## 0.1.2
 
 * Alpha: Resolve cancelled/superseded Android method calls with `E_CANCELLED` instead of leaving their futures pending forever, matching iOS cancellation semantics

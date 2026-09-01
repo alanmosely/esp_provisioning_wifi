@@ -1,4 +1,5 @@
 import 'package:esp_provisioning_wifi/esp_provisioning_state.dart';
+import 'package:esp_provisioning_wifi/esp_wifi_network.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -20,20 +21,25 @@ void main() {
 
     test('defensively copies list inputs', () {
       final bluetoothDevices = <String>['device-1'];
-      final wifiNetworks = <String>['ssid-1'];
+      final wifiNetworks = <EspWifiNetwork>[
+        const EspWifiNetwork(ssid: 'ssid-1'),
+      ];
       final state = EspProvisioningState(
         bluetoothDevices: bluetoothDevices,
         wifiNetworks: wifiNetworks,
       );
 
       bluetoothDevices.add('device-2');
-      wifiNetworks.add('ssid-2');
+      wifiNetworks.add(const EspWifiNetwork(ssid: 'ssid-2'));
 
       expect(state.bluetoothDevices, <String>['device-1']);
-      expect(state.wifiNetworks, <String>['ssid-1']);
+      expect(state.wifiNetworks, <EspWifiNetwork>[
+        const EspWifiNetwork(ssid: 'ssid-1'),
+      ]);
       expect(
           () => state.bluetoothDevices.add('device-3'), throwsUnsupportedError);
-      expect(() => state.wifiNetworks.add('ssid-3'), throwsUnsupportedError);
+      expect(() => state.wifiNetworks.add(const EspWifiNetwork(ssid: 'ssid-3')),
+          throwsUnsupportedError);
     });
 
     test('copyWith updates selected fields while preserving others', () {

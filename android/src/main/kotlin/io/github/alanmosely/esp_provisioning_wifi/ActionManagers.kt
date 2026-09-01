@@ -1,4 +1,4 @@
-package how.virc.flutter_esp_ble_prov
+package io.github.alanmosely.esp_provisioning_wifi
 
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
@@ -28,7 +28,10 @@ abstract class ActionManager(protected val boss: Boss) {
 
   protected fun disconnect(esp: ESPDevice?) {
     try {
-      esp?.disconnectDevice()
+      esp?.let {
+        boss.noteSelfInitiatedDisconnect()
+        it.disconnectDevice()
+      }
     } catch (e: Exception) {
       boss.e("disconnect failed: $e")
     } finally {
@@ -93,7 +96,6 @@ class WifiScanManager(boss: Boss) : ActionManager(boss) {
       return
     }
 
-    boss.networks.clear()
     boss.d("esp connect: start")
 
     boss.connect(
@@ -113,9 +115,23 @@ class WifiScanManager(boss: Boss) : ActionManager(boss) {
                 disconnect(esp)
                 return
               }
-              wifiList?.forEach { boss.networks.add(it.wifiName) }
-              boss.d("scanNetworks: complete (${boss.networks.size} networks)")
-              resolver.success(ArrayList<String>(boss.networks.toList()))
+              // Dedupe by SSID, keeping the strongest signal per network.
+              val bySsid = LinkedHashMap<String, WiFiAccessPoint>()
+              wifiList?.forEach { accessPoint ->
+                val existing = bySsid[accessPoint.wifiName]
+                if (existing == null || accessPoint.rssi > existing.rssi) {
+                  bySsid[accessPoint.wifiName] = accessPoint
+                }
+              }
+              val networks = ArrayList<HashMap<String, Any?>>()
+              bySsid.values.forEach { accessPoint ->
+                networks.add(hashMapOf(
+                    "ssid" to accessPoint.wifiName,
+                    "rssi" to accessPoint.rssi,
+                    "security" to accessPoint.security))
+              }
+              boss.d("scanNetworks: complete (${networks.size} networks)")
+              resolver.success(networks)
               disconnect(esp)
             }
 
@@ -224,7 +240,10 @@ class WifiProvisionManager(boss: Boss) : ActionManager(boss) {
           esp.provision(ssid, passphrase, object : ProvisionListener {
             override fun createSessionFailed(e: java.lang.Exception?) {
               boss.e("wifiprovision createSessionFailed $e")
-              resolver.success(false)
+              resolver.error(
+                  ErrorCodes.PROV_SESSION_FAILED,
+                  "Provisioning session could not be established",
+                  "Exception details $e (often an incorrect proof of possession)")
               disconnect(esp)
             }
 
@@ -234,7 +253,10 @@ class WifiProvisionManager(boss: Boss) : ActionManager(boss) {
 
             override fun wifiConfigFailed(e: java.lang.Exception?) {
               boss.e("wifiConfigFailed $e")
-              resolver.success(false)
+              resolver.error(
+                  ErrorCodes.PROV_CONFIG_FAILED,
+                  "Failed to send WiFi configuration",
+                  "Exception details $e")
               disconnect(esp)
             }
 
@@ -244,7 +266,10 @@ class WifiProvisionManager(boss: Boss) : ActionManager(boss) {
 
             override fun wifiConfigApplyFailed(e: java.lang.Exception?) {
               boss.e("wifiConfigApplyFailed $e")
-              resolver.success(false)
+              resolver.error(
+                  ErrorCodes.PROV_CONFIG_FAILED,
+                  "Failed to apply WiFi configuration",
+                  "Exception details $e")
               disconnect(esp)
             }
 
@@ -252,7 +277,23 @@ class WifiProvisionManager(boss: Boss) : ActionManager(boss) {
                 failureReason: ESPConstants.ProvisionFailureReason?
             ) {
               boss.e("provisioningFailedFromDevice $failureReason")
-              resolver.success(false)
+              when (failureReason) {
+                ESPConstants.ProvisionFailureReason.AUTH_FAILED ->
+                    resolver.error(
+                        ErrorCodes.PROV_AUTH_FAILED,
+                        "WiFi authentication failed",
+                        "Device rejected the WiFi passphrase")
+                ESPConstants.ProvisionFailureReason.NETWORK_NOT_FOUND ->
+                    resolver.error(
+                        ErrorCodes.PROV_NETWORK_NOT_FOUND,
+                        "WiFi network not found",
+                        "Device could not find the network $ssid")
+                else ->
+                    resolver.error(
+                        ErrorCodes.PROV_FAILED,
+                        "Provisioning failed on device",
+                        "Failure reason $failureReason")
+              }
               disconnect(esp)
             }
 
@@ -264,7 +305,10 @@ class WifiProvisionManager(boss: Boss) : ActionManager(boss) {
 
             override fun onProvisioningFailed(e: java.lang.Exception?) {
               boss.e("onProvisioningFailed $e")
-              resolver.success(false)
+              resolver.error(
+                  ErrorCodes.PROV_FAILED,
+                  "Provisioning failed",
+                  "Exception details $e")
               disconnect(esp)
             }
           })

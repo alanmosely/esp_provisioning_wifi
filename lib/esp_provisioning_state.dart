@@ -1,5 +1,7 @@
 import 'package:equatable/equatable.dart';
 
+import 'esp_wifi_network.dart';
+
 /// A list of all the possible states that the ESP provisioning can be in
 enum EspProvisioningStatus {
   initial,
@@ -19,6 +21,10 @@ enum EspProvisioningFailure {
   cancelled,
   deviceNotFound,
   invalidResponse,
+  sessionFailed,
+  authenticationFailed,
+  networkNotFound,
+  provisioningFailed,
   platform,
   unknown,
 }
@@ -32,7 +38,7 @@ class EspProvisioningState extends Equatable {
     this.status = EspProvisioningStatus.initial,
     List<String> bluetoothDevices = const <String>[],
     this.bluetoothDevice = "",
-    List<String> wifiNetworks = const <String>[],
+    List<EspWifiNetwork> wifiNetworks = const <EspWifiNetwork>[],
     this.wifiNetwork = "",
     this.wifiProvisioned = false,
     this.errorCode,
@@ -41,12 +47,13 @@ class EspProvisioningState extends Equatable {
     this.failure = EspProvisioningFailure.none,
   })  : _bluetoothDevices =
             List.unmodifiable(List<String>.of(bluetoothDevices)),
-        _wifiNetworks = List.unmodifiable(List<String>.of(wifiNetworks));
+        _wifiNetworks =
+            List.unmodifiable(List<EspWifiNetwork>.of(wifiNetworks));
 
   final EspProvisioningStatus status;
   final List<String> _bluetoothDevices;
   final String bluetoothDevice;
-  final List<String> _wifiNetworks;
+  final List<EspWifiNetwork> _wifiNetworks;
   final String wifiNetwork;
   final bool wifiProvisioned;
   final String? errorCode;
@@ -55,13 +62,13 @@ class EspProvisioningState extends Equatable {
   final EspProvisioningFailure failure;
 
   List<String> get bluetoothDevices => _bluetoothDevices;
-  List<String> get wifiNetworks => _wifiNetworks;
+  List<EspWifiNetwork> get wifiNetworks => _wifiNetworks;
 
   EspProvisioningState copyWith({
     EspProvisioningStatus? status,
     List<String>? bluetoothDevices,
     String? bluetoothDevice,
-    List<String>? wifiNetworks,
+    List<EspWifiNetwork>? wifiNetworks,
     String? wifiNetwork,
     bool? wifiProvisioned,
     Object? errorCode = _unset,

@@ -12,23 +12,25 @@ Library to provision WiFi on ESP32 devices over Bluetooth, using Bloc.
 
 - Import the package via the public barrel:
   - `import 'package:esp_provisioning_wifi/esp_provisioning_wifi.dart';`
-- `provisionWifi(...)` returns `Future<bool>` (non-null).
-  - `true` means provisioning completed successfully.
-  - `false` means provisioning completed but was not successful.
+- `scanWifiNetworks(...)` returns `Future<List<EspWifiNetwork>>`.
+  - Each network exposes `ssid`, plus `rssi` (dBm) and `security` where the
+    platform reports them (currently Android only; null on iOS).
+- `provisionWifi(...)` returns `Future<bool>`.
+  - It resolves `true` on success and throws a `PlatformException` with a typed
+    `E_PROV_*` code on failure.
 - `cancelOperations()` returns `Future<bool>` and cancels active native work.
   - In-flight scan/provision calls fail with `E_CANCELLED` (`EspProvisioningFailure.cancelled`) on both platforms.
 - `EspProvisioningState.failure` exposes typed failures using `EspProvisioningFailure`.
-  - `none`, `permissionDenied`, `timeout`, `cancelled`, `deviceNotFound`, `invalidResponse`, `platform`, `unknown`.
+  - `none`, `permissionDenied`, `timeout`, `cancelled`, `deviceNotFound`, `invalidResponse`,
+    `sessionFailed`, `authenticationFailed`, `networkNotFound`, `provisioningFailed`,
+    `platform`, `unknown`.
 - `EspProvisioningState.errorCode` and `errorDetails` expose raw platform diagnostics.
-- `EspProvisioningState.timedOut` is removed and replaced by typed failure checks:
-  - use `state.failure == EspProvisioningFailure.timeout`.
 - `scanWifiNetworks(...)` and `provisionWifi(...)` accept optional `connectTimeout`.
   - This timeout is propagated through Dart and native layers for BLE connection timing.
-- Dart-side request timeouts cancel the in-flight native operation and surface as
-  `failure == EspProvisioningFailure.timeout`.
-  - On timeout the step status (e.g. `wifiScanned`) is still emitted; `status` is
-    not set to `error`. Listen on `state.failure != EspProvisioningFailure.none`
-    to catch all failures, including timeouts.
+- `EspProvisioningBloc` accepts `connectTimeout` (BLE connect phase, default 15s)
+  and `requestTimeout` (overall operation budget, default `connectTimeout` + 20s).
+- Dart-side request timeouts cancel the in-flight native operation and emit
+  `status: EspProvisioningStatus.error` with `failure == EspProvisioningFailure.timeout`.
 - `fetchCustomData(...)` reads provisioning custom endpoint payloads (defaults to endpoint `custom-data`).
   - Useful for firmware-driven provisioning metadata such as lock state or SoftAP password hints.
 
@@ -47,12 +49,41 @@ Native layers report stable error codes that the bloc maps into `EspProvisioning
 - `E_CONNECT`
 - `E_CUSTOM_DATA`
 - `E_DEVICE`
+- `E_PROV_SESSION`
+- `E_PROV_CONFIG`
+- `E_PROV_AUTH`
+- `E_PROV_NETWORK_NOT_FOUND`
+- `E_PROV_FAILED`
 - `DEVICE_DISCONNECTED`
 - `E_CANCELLED`
 - `E_TIMEOUT`
 - `E_UNKNOWN`
 
 Import: `package:esp_provisioning_wifi/esp_provisioning_error_codes.dart`.
+
+## Migration (0.1.x -> 0.2.0)
+
+1. The method channel and native plugin package/classes were renamed, so this
+   plugin no longer conflicts with apps that also depend on
+   `flutter_esp_ble_prov`. No Dart-side changes are needed for this.
+2. `scanWifiNetworks(...)` and `EspProvisioningState.wifiNetworks` now use
+   `EspWifiNetwork` instead of `String`. Use `network.ssid` where you previously
+   used the string; `rssi` and `security` are available on Android.
+3. Provisioning failures now throw typed `PlatformException`s (`E_PROV_SESSION`,
+   `E_PROV_CONFIG`, `E_PROV_AUTH`, `E_PROV_NETWORK_NOT_FOUND`, `E_PROV_FAILED`)
+   instead of resolving `false`. The bloc maps them to new
+   `EspProvisioningFailure` values (`sessionFailed`, `authenticationFailed`,
+   `networkNotFound`, `provisioningFailed`); exhaustive switches over
+   `EspProvisioningFailure` must handle them.
+4. Timeouts now emit `status: EspProvisioningStatus.error` (previously the step
+   status was kept with `failure: timeout`).
+5. The `TIMEOUT` constant was replaced by `kEspDefaultConnectTimeout` and
+   `kEspDefaultOperationBudget`; `EspProvisioningBloc` now takes `connectTimeout`
+   and `requestTimeout` parameters.
+6. Minimums raised: Dart `^3.5.0`, Flutter `3.24+`, flutter_bloc 9,
+   permission_handler 12 (13.x is deferred until its AGP 9 / compileSdk 37
+   toolchain requirements are mainstream; pinning `permission_handler: ^13.0.0`
+   in your app will conflict with this plugin's `^12.0.3` constraint).
 
 ## Migration (0.0.x -> 0.1.0)
 
@@ -72,9 +103,7 @@ BlocProvider(
   child: BlocConsumer<EspProvisioningBloc, EspProvisioningState>(
     listener: (_, state) {
       if (state.failure != EspProvisioningFailure.none) {
-        // Use typed failure for user-facing behavior. Checking `failure`
-        // rather than `status == error` also catches timeouts, which keep
-        // their step status.
+        // Use typed failure for user-facing behavior.
         debugPrint('Failure: ${state.failure} | ${state.errorMsg}');
       }
     },
