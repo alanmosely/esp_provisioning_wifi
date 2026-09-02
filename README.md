@@ -85,8 +85,9 @@ Platform note: both platforms emit the granular provisioning codes
 `E_PROV_NETWORK_NOT_FOUND`), with `E_PROV_FAILED` as the fallback. On iOS an
 incorrect proof of possession is typically rejected during the connect phase
 (`E_CONNECT`/`E_DEVICE`, mapped to `EspProvisioningFailure.platform`) rather
-than as `E_PROV_SESSION`. `DEVICE_DISCONNECTED` is iOS-only;
-`E_DEVICE_NOT_FOUND` is Android-only.
+than as `E_PROV_SESSION`. `DEVICE_DISCONNECTED` is iOS-only. Both platforms
+emit `E_DEVICE_NOT_FOUND` when the named device cannot be found (Android from
+its BLE scan cache, iOS from the device search).
 
 ## Migration (0.2.x -> 0.3.0)
 

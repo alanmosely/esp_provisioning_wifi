@@ -31,6 +31,15 @@ class EspProvisioningBloc
             (connectTimeout ?? kEspDefaultConnectTimeout) +
                 kEspDefaultOperationBudget,
         super(EspProvisioningState()) {
+    if (_requestTimeout <= _connectTimeout) {
+      throw ArgumentError.value(
+        requestTimeout,
+        'requestTimeout',
+        'must be strictly greater than connectTimeout ($_connectTimeout), '
+            'otherwise typed native error codes (e.g. E_CONNECT_TIMEOUT) can '
+            'never surface',
+      );
+    }
     on<EspProvisioningEventStart>(
       _onStart,
       transformer: droppable(),
@@ -70,6 +79,15 @@ class EspProvisioningBloc
     EspProvisioningEventStart event,
     Emitter<EspProvisioningState> emit,
   ) async {
+    // Handlers of different event types run concurrently (the transformers
+    // only serialize within one type), so a handler must not touch state once
+    // a later operation has superseded it: its caught E_CANCELLED (triggered
+    // by the successor's native cancel) or late result would clobber the new
+    // flow's state. The epoch is bumped-and-captured synchronously BEFORE the
+    // fallible native-cancel await: a post-await re-read could adopt a
+    // successor's epoch, and a cancel failure must still surface as this
+    // handler's error.
+    var epoch = _operationEpoch;
     try {
       final bool bluetoothIsGranted;
       if (_bluetoothPermissionRequest != null) {
@@ -78,10 +96,19 @@ class EspProvisioningBloc
         bluetoothIsGranted = await requestBluetoothPermission();
       }
       if (bluetoothIsGranted) {
-        await _cancelOperations();
+        epoch = ++_operationEpoch;
+        await espProvisioningService.cancelOperations();
+        if (epoch != _operationEpoch) {
+          return;
+        }
         _emitStateWithClearedError(
           emit,
           status: EspProvisioningStatus.initial,
+          bluetoothDevices: const <String>[],
+          bluetoothDevice: '',
+          wifiNetworks: const <EspWifiNetwork>[],
+          wifiNetwork: '',
+          wifiProvisioned: false,
         );
 
         final timedScan = await _runWithTimeout<List<String>>(
@@ -91,6 +118,9 @@ class EspProvisioningBloc
           const <String>[],
         );
 
+        if (epoch != _operationEpoch) {
+          return;
+        }
         _emitStateWithTimeoutResult(
           emit,
           status: EspProvisioningStatus.bleScanned,
@@ -99,7 +129,7 @@ class EspProvisioningBloc
           timeoutOperation: 'scanBleDevices',
           timeoutMessage: 'BLE scan timed out',
         );
-      } else {
+      } else if (epoch == _operationEpoch) {
         emit(state.copyWith(
           status: EspProvisioningStatus.error,
           errorCode: EspProvisioningErrorCodes.permission,
@@ -109,7 +139,9 @@ class EspProvisioningBloc
         ));
       }
     } on Object catch (e) {
-      _emitUnexpectedError(emit, e);
+      if (epoch == _operationEpoch) {
+        _emitUnexpectedError(emit, e);
+      }
     }
   }
 
@@ -123,13 +155,22 @@ class EspProvisioningBloc
     EspProvisioningEventBleSelected event,
     Emitter<EspProvisioningState> emit,
   ) async {
+    var epoch = _operationEpoch;
     try {
-      await _cancelOperations();
+      epoch = ++_operationEpoch;
+      await espProvisioningService.cancelOperations();
+      if (epoch != _operationEpoch) {
+        return;
+      }
       if (event.bluetoothDevice == '') {
         _emitStateWithClearedError(
           emit,
           status: EspProvisioningStatus.initial,
           bluetoothDevices: const <String>[],
+          bluetoothDevice: '',
+          wifiNetworks: const <EspWifiNetwork>[],
+          wifiNetwork: '',
+          wifiProvisioned: false,
         );
         return;
       }
@@ -137,6 +178,9 @@ class EspProvisioningBloc
         emit,
         status: EspProvisioningStatus.deviceChosen,
         bluetoothDevice: event.bluetoothDevice,
+        wifiNetworks: const <EspWifiNetwork>[],
+        wifiNetwork: '',
+        wifiProvisioned: false,
       );
       final timedScan = await _runWithTimeout<List<EspWifiNetwork>>(
         () => espProvisioningService.scanWifiNetworks(
@@ -148,6 +192,9 @@ class EspProvisioningBloc
         ),
         const <EspWifiNetwork>[],
       );
+      if (epoch != _operationEpoch) {
+        return;
+      }
       _emitStateWithTimeoutResult(
         emit,
         status: EspProvisioningStatus.wifiScanned,
@@ -158,7 +205,9 @@ class EspProvisioningBloc
         timeoutMessage: 'WiFi scan timed out',
       );
     } on Object catch (e) {
-      _emitUnexpectedError(emit, e);
+      if (epoch == _operationEpoch) {
+        _emitUnexpectedError(emit, e);
+      }
     }
   }
 
@@ -172,12 +221,18 @@ class EspProvisioningBloc
     EspProvisioningEventWifiSelected event,
     Emitter<EspProvisioningState> emit,
   ) async {
+    var epoch = _operationEpoch;
     try {
-      await _cancelOperations();
+      epoch = ++_operationEpoch;
+      await espProvisioningService.cancelOperations();
+      if (epoch != _operationEpoch) {
+        return;
+      }
       _emitStateWithClearedError(
         emit,
         status: EspProvisioningStatus.networkChosen,
         wifiNetwork: event.wifiNetwork,
+        wifiProvisioned: false,
       );
       final timedProvision = await _runWithTimeout<bool>(
         () => espProvisioningService.provisionWifi(
@@ -191,6 +246,9 @@ class EspProvisioningBloc
         ),
         false,
       );
+      if (epoch != _operationEpoch) {
+        return;
+      }
       _emitStateWithTimeoutResult(
         emit,
         status: EspProvisioningStatus.wifiProvisioned,
@@ -200,7 +258,9 @@ class EspProvisioningBloc
         timeoutMessage: 'WiFi provisioning timed out',
       );
     } on Object catch (e) {
-      _emitUnexpectedError(emit, e);
+      if (epoch == _operationEpoch) {
+        _emitUnexpectedError(emit, e);
+      }
     }
   }
 
@@ -285,9 +345,17 @@ class EspProvisioningBloc
     return null;
   }
 
-  Future<void> _cancelOperations() async {
+  @override
+  Future<void> close() async {
+    // Bumping the epoch marks every in-flight handler stale (so it cannot
+    // emit into a closed bloc) before cancelling the native work it started.
     _operationEpoch++;
-    await espProvisioningService.cancelOperations();
+    try {
+      await espProvisioningService.cancelOperations();
+    } on Object catch (_) {
+      // Best-effort: native operations self-clean on their own timeouts.
+    }
+    return super.close();
   }
 
   void _emitStateWithClearedError(

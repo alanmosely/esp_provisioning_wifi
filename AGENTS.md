@@ -124,6 +124,17 @@ Fallback CLI commands:
   Espressif listener callbacks, which arrive on background threads.
 - Cancelled/superseded operations must resolve with `E_CANCELLED`, never be
   left unresolved.
+- In-flight connect attempts must register their cancellation hook via
+  `Boss.trackConnectCancel` (see `cancelAttempt` in `Boss.connect`):
+  `startOperation`/`cancelOperations` invoke it to unregister the attempt's
+  EventBus subscriber immediately. A stale subscriber consumes the
+  self-initiated-disconnect credit meant for the successor (spuriously failing
+  a healthy connect) or over-counts via its CONNECTED branch.
+- BLE device scans must be bracketed with `Boss.noteBleScanStarted()` /
+  `noteBleScanFinished()` so `startOperation`/`cancelOperations` can
+  `stopBleScan()`; stopping synchronously fires the listener's
+  `scanCompleted`, which the already-cancelled resolver must drop (cancel the
+  resolver before stopping the scan).
 - One native operation at a time: `Boss.startOperation()` supersedes the
   previous operation (bumps the token, disconnects the active device, cancels
   the tracked resolver). New managers must obtain their resolver via
@@ -143,10 +154,24 @@ Fallback CLI commands:
   existing patterns, and wait for that job before treating a change as
   verified.
 - Avoid force-casts (`as!`) on method arguments.
-- Guard `result(...)` so it is invoked only once per method call.
+- Resolve every operation outcome through `BLEProvisionService.resolve(...)`
+  (or `fail`), the exactly-once main-thread dispatch point mirroring Android's
+  `OperationResolver`: ESPProvision invokes completion handlers on background
+  queues, while `FlutterResult` must be called on the platform thread and
+  `didResolve` is main-thread-confined. Never invoke the raw `FlutterResult`
+  from an ESPProvision callback.
 - Return early after error resolution to prevent duplicate responses.
 - Mirror Android's single-active-operation model via
   `ProvisionOperationCoordinator` tokens and `resolveCancelledIfInactive()`.
+  The coordinator also tracks the active `BLEProvisionService` and resolves it
+  with `E_CANCELLED` on supersession/cancel: call
+  `coordinator.trackActiveService(...)` immediately after constructing a
+  service (resolution clears the reference via `clearActiveService`), and keep
+  cancellation resolution outside the coordinator lock — it re-enters
+  coordinator methods.
+- `ESPProvisionManager.stopESPDevicesSearch()` force-unwraps the manager's BLE
+  transport: only call it after a device search has started (see
+  `stopDeviceSearchIfStarted`).
 
 ## BLoC / Dart Rules
 - Public package users should import only:
@@ -167,7 +192,19 @@ Fallback CLI commands:
   `Boss.DEFAULT_CONNECT_TIMEOUT_MS` (Android), `TimeoutDefaults.connectTimeoutMs` (iOS).
 - `EspProvisioningBloc._operationEpoch` guards stale timed-out handlers from
   cancelling a newer operation's native work; new bloc operations must follow
-  the `_runWithTimeout`/`_cancelOperations` pattern.
+  the `_runWithTimeout` pattern. Handlers of DIFFERENT event types run
+  concurrently (transformers only serialize within one type), so every
+  handler bumps-and-captures the epoch synchronously
+  (`epoch = ++_operationEpoch;`) BEFORE awaiting the native
+  `cancelOperations()` — never re-read it after an await (a parked handler
+  would adopt a successor's epoch), and never bump inside the awaited helper
+  (a cancel failure would make the handler look stale and swallow its own
+  error). Every post-await emit — including caught-error emits — must be
+  skipped once the epoch has advanced. `close()` bumps the epoch so in-flight
+  handlers cannot emit into a closed bloc.
+- The `requestTimeout > connectTimeout` invariant is enforced with an
+  `ArgumentError` in the constructor; tests that shrink `requestTimeout` must
+  pass a smaller `connectTimeout` explicitly.
 - Cancellation semantics:
   - Native cancellation should map to `E_CANCELLED`.
   - BLoC should map `E_CANCELLED` to `EspProvisioningFailure.cancelled`.

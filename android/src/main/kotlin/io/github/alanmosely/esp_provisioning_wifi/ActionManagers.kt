@@ -75,8 +75,10 @@ class BleScanManager(boss: Boss) : ActionManager(boss) {
     val resolver = startResolver(ctx)
     boss.devices.clear()
 
+    boss.noteBleScanStarted()
     boss.espManager.searchBleEspDevices(prefix, object : BleScanListener {
       override fun scanStartFailed() {
+        boss.noteBleScanFinished()
         boss.e("searchBleEspDevices: scanStartFailed")
         resolver.error(
             ErrorCodes.BLE_SCAN_START_FAILED,
@@ -95,11 +97,13 @@ class BleScanManager(boss: Boss) : ActionManager(boss) {
       }
 
       override fun scanCompleted() {
+        boss.noteBleScanFinished()
         resolver.success(ArrayList<String>(boss.devices.keys.toList()))
         boss.d("searchBleEspDevices: scanComplete")
       }
 
       override fun onFailure(e: java.lang.Exception?) {
+        boss.noteBleScanFinished()
         boss.e("searchBleEspDevices: onFailure $e")
         resolver.error(ErrorCodes.BLE_SCAN_FAILED, "BLE scan failed", "Exception details $e")
       }

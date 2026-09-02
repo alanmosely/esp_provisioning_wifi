@@ -23,7 +23,7 @@ class MethodChannelFlutterEspBleProv extends FlutterEspBleProvPlatform {
 
   @override
   Future<List<String>> scanBleDevices(String prefix) async {
-    final args = {'prefix': prefix};
+    final args = {FlutterEspBleProvMethodNames.prefixArg: prefix};
     final raw = await methodChannel.invokeMethod<List<Object?>>(
       FlutterEspBleProvMethodNames.scanBleDevices,
       args,
@@ -43,8 +43,8 @@ class MethodChannelFlutterEspBleProv extends FlutterEspBleProvPlatform {
     Duration? connectTimeout,
   }) async {
     final args = {
-      'deviceName': deviceName,
-      'proofOfPossession': proofOfPossession,
+      FlutterEspBleProvMethodNames.deviceNameArg: deviceName,
+      FlutterEspBleProvMethodNames.proofOfPossessionArg: proofOfPossession,
       FlutterEspBleProvMethodNames.securityArg: security.channelValue,
       if (username != null) FlutterEspBleProvMethodNames.usernameArg: username,
       if (connectTimeout != null)
@@ -72,10 +72,10 @@ class MethodChannelFlutterEspBleProv extends FlutterEspBleProvPlatform {
     Duration? connectTimeout,
   }) async {
     final args = {
-      'deviceName': deviceName,
-      'proofOfPossession': proofOfPossession,
-      'ssid': ssid,
-      'passphrase': passphrase,
+      FlutterEspBleProvMethodNames.deviceNameArg: deviceName,
+      FlutterEspBleProvMethodNames.proofOfPossessionArg: proofOfPossession,
+      FlutterEspBleProvMethodNames.ssidArg: ssid,
+      FlutterEspBleProvMethodNames.passphraseArg: passphrase,
       FlutterEspBleProvMethodNames.securityArg: security.channelValue,
       if (username != null) FlutterEspBleProvMethodNames.usernameArg: username,
       if (connectTimeout != null)
@@ -108,8 +108,8 @@ class MethodChannelFlutterEspBleProv extends FlutterEspBleProvPlatform {
     Duration? connectTimeout,
   }) {
     final args = {
-      'deviceName': deviceName,
-      'proofOfPossession': proofOfPossession,
+      FlutterEspBleProvMethodNames.deviceNameArg: deviceName,
+      FlutterEspBleProvMethodNames.proofOfPossessionArg: proofOfPossession,
       FlutterEspBleProvMethodNames.endpointArg: endpoint,
       FlutterEspBleProvMethodNames.payloadArg: payload,
       FlutterEspBleProvMethodNames.securityArg: security.channelValue,

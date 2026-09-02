@@ -11,8 +11,13 @@ class FlutterEspBleProvMethodNames {
   static const String cancelOperations = 'cancelOperations';
 
   static const String connectTimeoutMsArg = 'connectTimeoutMs';
+  static const String deviceNameArg = 'deviceName';
   static const String endpointArg = 'endpoint';
+  static const String passphraseArg = 'passphrase';
   static const String payloadArg = 'payload';
+  static const String prefixArg = 'prefix';
+  static const String proofOfPossessionArg = 'proofOfPossession';
   static const String securityArg = 'security';
+  static const String ssidArg = 'ssid';
   static const String usernameArg = 'username';
 }

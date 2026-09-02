@@ -49,6 +49,8 @@ class Boss {
   @Volatile private var currentOperationToken = 0
   @Volatile private var activeDevice: ESPDevice? = null
   @Volatile private var activeResolver: OperationResolver? = null
+  @Volatile private var activeConnectCancel: (() -> Unit)? = null
+  @Volatile private var bleScanInFlight = false
 
   /**
    * Disconnects initiated by the plugin itself on devices that may hold a live
@@ -91,6 +93,8 @@ class Boss {
     currentOperationToken += 1
     disconnectActiveDeviceLocked()
     cancelActiveResolverLocked()
+    stopBleScanLocked()
+    cancelActiveConnectLocked()
     return currentOperationToken
   }
 
@@ -99,6 +103,8 @@ class Boss {
     currentOperationToken += 1
     disconnectActiveDeviceLocked()
     cancelActiveResolverLocked()
+    stopBleScanLocked()
+    cancelActiveConnectLocked()
     return true
   }
 
@@ -111,6 +117,50 @@ class Boss {
     val resolver = activeResolver ?: return
     activeResolver = null
     resolver.cancelled()
+  }
+
+  /**
+   * Registers the in-flight connect attempt's cancellation hook so
+   * supersession/cancellation dismantles its EventBus subscriber immediately.
+   * A stale subscriber would consume the self-initiated-disconnect credit
+   * meant for the successor's connect (spuriously failing a healthy attempt
+   * with E_CONNECT) or permanently over-count via its CONNECTED branch.
+   */
+  @Synchronized
+  fun trackConnectCancel(cancel: () -> Unit) {
+    activeConnectCancel = cancel
+  }
+
+  private fun cancelActiveConnectLocked() {
+    val cancel = activeConnectCancel ?: return
+    activeConnectCancel = null
+    cancel()
+  }
+
+  fun noteBleScanStarted() {
+    bleScanInFlight = true
+  }
+
+  fun noteBleScanFinished() {
+    bleScanInFlight = false
+  }
+
+  /**
+   * Stops an in-flight BLE device scan so cancellation actually releases the
+   * radio (rapid rescans otherwise stack OS-level scans toward Android's scan
+   * throttle). Must run after [cancelActiveResolverLocked]: stopping invokes
+   * the listener's scanCompleted, which the already-cancelled resolver drops.
+   */
+  private fun stopBleScanLocked() {
+    if (!bleScanInFlight) {
+      return
+    }
+    bleScanInFlight = false
+    try {
+      espManager.stopBleScan()
+    } catch (e: Exception) {
+      e("stopBleScan failed: $e")
+    }
   }
 
   @Synchronized
@@ -185,6 +235,13 @@ class Boss {
         }
       }
       try {
+        // In the connect-timeout path the GATT can be live (connected at the
+        // Android level, service discovery pending), so this teardown can emit
+        // a DISCONNECTED event; note the credit like every other
+        // plugin-initiated disconnect. Over-counting on the paths where no
+        // event follows only degrades a future fast-fail into the connect
+        // timeout; an under-count fails a healthy attempt.
+        noteSelfInitiatedDisconnect()
         esp.disconnectDevice()
       } catch (e: Exception) {
         e("disconnect after connect failure failed: $e")
@@ -192,6 +249,25 @@ class Boss {
         clearActiveDevice(esp)
       }
       onErrorCallback(code, message, details)
+    }
+
+    // Invoked by startOperation/cancelOperations when a new operation
+    // supersedes this in-flight attempt. Device teardown (and its disconnect
+    // credit) is handled by disconnectActiveDeviceLocked before this runs, so
+    // only the subscriber and timeout need dismantling here.
+    fun cancelAttempt() {
+      if (resolved) {
+        return
+      }
+      resolved = true
+      mainHandler.removeCallbacks(timeoutRunnable)
+      unregisterTarget?.let {
+        if (bus.isRegistered(it)) {
+          bus.unregister(it)
+        }
+      }
+      clearActiveDevice(esp)
+      onErrorCallback(ErrorCodes.CANCELLED, "Operation cancelled", null)
     }
 
     timeoutRunnable = Runnable {
@@ -256,6 +332,7 @@ class Boss {
     unregisterTarget = eventSubscriber
     bus.register(eventSubscriber)
     mainHandler.postDelayed(timeoutRunnable, connectTimeoutMs)
+    trackConnectCancel { cancelAttempt() }
 
     if (!isOperationActive(operationToken)) {
       resolveConnectError(ErrorCodes.CANCELLED, "Operation cancelled", null)

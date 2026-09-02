@@ -73,6 +73,7 @@ void main() {
             Completer<List<EspWifiNetwork>>().future,
       ),
       bluetoothPermissionRequest: () async => true,
+      connectTimeout: const Duration(milliseconds: 5),
       requestTimeout: const Duration(milliseconds: 250),
     ),
     act: (bloc) =>
@@ -93,6 +94,7 @@ void main() {
         provisionWifiHandler: (_, __, ___, ____) => Completer<bool>().future,
       ),
       bluetoothPermissionRequest: () async => true,
+      connectTimeout: const Duration(milliseconds: 5),
       requestTimeout: const Duration(milliseconds: 250),
     ),
     act: (bloc) => bloc.add(const EspProvisioningEventWifiSelected(

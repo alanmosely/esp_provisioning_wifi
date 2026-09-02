@@ -16,9 +16,11 @@ class FakeProvisioningService extends FlutterEspBleProv {
       String ssid,
       String passphrase,
     )? provisionWifiHandler,
+    Future<bool> Function()? cancelOperationsHandler,
   })  : _scanBleDevicesHandler = scanBleDevicesHandler,
         _scanWifiNetworksHandler = scanWifiNetworksHandler,
-        _provisionWifiHandler = provisionWifiHandler;
+        _provisionWifiHandler = provisionWifiHandler,
+        _cancelOperationsHandler = cancelOperationsHandler;
 
   final Future<List<String>> Function(String prefix)? _scanBleDevicesHandler;
   final Future<List<EspWifiNetwork>> Function(String deviceName, String pop)?
@@ -29,6 +31,7 @@ class FakeProvisioningService extends FlutterEspBleProv {
     String ssid,
     String passphrase,
   )? _provisionWifiHandler;
+  final Future<bool> Function()? _cancelOperationsHandler;
 
   int scanBleDevicesCalls = 0;
   int scanWifiNetworksCalls = 0;
@@ -96,7 +99,10 @@ class FakeProvisioningService extends FlutterEspBleProv {
   @override
   Future<bool> cancelOperations() {
     cancelOperationsCalls++;
-    return Future<bool>.value(true);
+    if (_cancelOperationsHandler == null) {
+      return Future<bool>.value(true);
+    }
+    return _cancelOperationsHandler();
   }
 }
 
@@ -106,6 +112,7 @@ void main() {
     build: () => EspProvisioningBloc(
       provisioningService: FakeProvisioningService(),
       bluetoothPermissionRequest: () async => false,
+      connectTimeout: const Duration(milliseconds: 5),
       requestTimeout: const Duration(milliseconds: 10),
     ),
     act: (bloc) => bloc.add(const EspProvisioningEventStart('PROV_')),
@@ -126,6 +133,7 @@ void main() {
         scanBleDevicesHandler: (_) async => const <String>['PROV_1', 'PROV_2'],
       ),
       bluetoothPermissionRequest: () async => true,
+      connectTimeout: const Duration(milliseconds: 5),
       requestTimeout: const Duration(milliseconds: 10),
     ),
     act: (bloc) => bloc.add(const EspProvisioningEventStart('PROV_')),
@@ -148,6 +156,7 @@ void main() {
             Completer<List<EspWifiNetwork>>().future,
       ),
       bluetoothPermissionRequest: () async => true,
+      connectTimeout: const Duration(milliseconds: 5),
       requestTimeout: const Duration(milliseconds: 10),
     ),
     act: (bloc) =>
@@ -170,9 +179,9 @@ void main() {
     ],
     verify: (bloc) {
       final service = bloc.espProvisioningService as FakeProvisioningService;
-      // Once when the handler starts, once again to cancel the timed-out
-      // native operation.
-      expect(service.cancelOperationsCalls, 2);
+      // Once when the handler starts, once to cancel the timed-out native
+      // operation, and once more when the bloc closes.
+      expect(service.cancelOperationsCalls, 3);
     },
   );
 
@@ -183,6 +192,7 @@ void main() {
         provisionWifiHandler: (_, __, ___, ____) => Future<bool>.value(false),
       ),
       bluetoothPermissionRequest: () async => true,
+      connectTimeout: const Duration(milliseconds: 5),
       requestTimeout: const Duration(milliseconds: 10),
     ),
     act: (bloc) => bloc.add(const EspProvisioningEventWifiSelected(
@@ -213,6 +223,7 @@ void main() {
         ),
       ),
       bluetoothPermissionRequest: () async => true,
+      connectTimeout: const Duration(milliseconds: 5),
       requestTimeout: const Duration(milliseconds: 10),
     ),
     act: (bloc) =>
@@ -244,6 +255,7 @@ void main() {
         ),
       ),
       bluetoothPermissionRequest: () async => true,
+      connectTimeout: const Duration(milliseconds: 5),
       requestTimeout: const Duration(milliseconds: 10),
     ),
     act: (bloc) =>
@@ -275,6 +287,7 @@ void main() {
       return EspProvisioningBloc(
         provisioningService: service,
         bluetoothPermissionRequest: () async => true,
+        connectTimeout: const Duration(milliseconds: 5),
         requestTimeout: const Duration(milliseconds: 250),
       );
     },
@@ -310,6 +323,7 @@ void main() {
         },
       ),
       bluetoothPermissionRequest: () async => true,
+      connectTimeout: const Duration(milliseconds: 5),
       requestTimeout: const Duration(milliseconds: 250),
     ),
     act: (bloc) async {
@@ -353,6 +367,7 @@ void main() {
         },
       ),
       bluetoothPermissionRequest: () async => true,
+      connectTimeout: const Duration(milliseconds: 5),
       requestTimeout: const Duration(milliseconds: 40),
     ),
     act: (bloc) async {
@@ -378,9 +393,9 @@ void main() {
     ],
     verify: (bloc) {
       final service = bloc.espProvisioningService as FakeProvisioningService;
-      // One cancel per handler start; the stale handler's late timeout must
-      // not add a third cancel against the newer operation.
-      expect(service.cancelOperationsCalls, 2);
+      // One cancel per handler start plus one on close; the stale handler's
+      // late timeout must not add another cancel against the newer operation.
+      expect(service.cancelOperationsCalls, 3);
     },
   );
 
@@ -406,6 +421,7 @@ void main() {
           ),
         ),
         bluetoothPermissionRequest: () async => true,
+        connectTimeout: const Duration(milliseconds: 5),
         requestTimeout: const Duration(milliseconds: 250),
       ),
       act: (bloc) => bloc.add(const EspProvisioningEventWifiSelected(
@@ -514,6 +530,7 @@ void main() {
         },
       ),
       bluetoothPermissionRequest: () async => true,
+      connectTimeout: const Duration(milliseconds: 5),
       requestTimeout: const Duration(milliseconds: 250),
     ),
     act: (bloc) async {
@@ -548,4 +565,226 @@ void main() {
       ),
     ],
   );
+
+  late Completer<List<String>> pendingBleScan;
+  blocTest<EspProvisioningBloc, EspProvisioningState>(
+    'superseded start handler does not clobber the newer flow with its '
+    'cancellation error',
+    build: () {
+      pendingBleScan = Completer<List<String>>();
+      return EspProvisioningBloc(
+        provisioningService: FakeProvisioningService(
+          scanBleDevicesHandler: (_) => pendingBleScan.future,
+        ),
+        bluetoothPermissionRequest: () async => true,
+        connectTimeout: const Duration(milliseconds: 5),
+        requestTimeout: const Duration(milliseconds: 250),
+      );
+    },
+    act: (bloc) async {
+      bloc.add(const EspProvisioningEventStart('PROV_'));
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      bloc.add(const EspProvisioningEventBleSelected('PROV_1', 'pop'));
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+      // The BleSelected handler's cancelOperations makes native reject the
+      // superseded BLE scan; the stale start handler must swallow it instead
+      // of emitting an error over the new flow's state.
+      pendingBleScan.completeError(PlatformException(
+        code: EspProvisioningErrorCodes.cancelled,
+        message: 'Operation cancelled',
+      ));
+    },
+    wait: const Duration(milliseconds: 60),
+    expect: () => <EspProvisioningState>[
+      EspProvisioningState(status: EspProvisioningStatus.initial),
+      EspProvisioningState(
+        status: EspProvisioningStatus.deviceChosen,
+        bluetoothDevice: 'PROV_1',
+      ),
+      EspProvisioningState(
+        status: EspProvisioningStatus.wifiScanned,
+        bluetoothDevice: 'PROV_1',
+      ),
+    ],
+  );
+
+  blocTest<EspProvisioningBloc, EspProvisioningState>(
+    'deselecting the device resets the previous selection state',
+    build: () => EspProvisioningBloc(
+      provisioningService: FakeProvisioningService(
+        scanWifiNetworksHandler: (_, __) async =>
+            const <EspWifiNetwork>[EspWifiNetwork(ssid: 'home-wifi')],
+      ),
+      bluetoothPermissionRequest: () async => true,
+      connectTimeout: const Duration(milliseconds: 5),
+      requestTimeout: const Duration(milliseconds: 250),
+    ),
+    act: (bloc) async {
+      bloc.add(const EspProvisioningEventBleSelected('PROV_1', 'pop'));
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      bloc.add(const EspProvisioningEventBleSelected('', 'pop'));
+    },
+    wait: const Duration(milliseconds: 60),
+    expect: () => <EspProvisioningState>[
+      EspProvisioningState(
+        status: EspProvisioningStatus.deviceChosen,
+        bluetoothDevice: 'PROV_1',
+      ),
+      EspProvisioningState(
+        status: EspProvisioningStatus.wifiScanned,
+        bluetoothDevice: 'PROV_1',
+        wifiNetworks: const <EspWifiNetwork>[EspWifiNetwork(ssid: 'home-wifi')],
+      ),
+      // Fully reset: no stale device name, network list, or selection.
+      EspProvisioningState(status: EspProvisioningStatus.initial),
+    ],
+  );
+
+  blocTest<EspProvisioningBloc, EspProvisioningState>(
+    'restarting the flow clears previous provisioning results',
+    build: () => EspProvisioningBloc(
+      provisioningService: FakeProvisioningService(
+        scanBleDevicesHandler: (_) async => const <String>['PROV_1'],
+        provisionWifiHandler: (_, __, ___, ____) async => true,
+      ),
+      bluetoothPermissionRequest: () async => true,
+      connectTimeout: const Duration(milliseconds: 5),
+      requestTimeout: const Duration(milliseconds: 250),
+    ),
+    act: (bloc) async {
+      bloc.add(const EspProvisioningEventWifiSelected(
+        'PROV_1',
+        'pop',
+        'home-wifi',
+        'secret',
+      ));
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      bloc.add(const EspProvisioningEventStart('PROV_'));
+    },
+    wait: const Duration(milliseconds: 60),
+    expect: () => <EspProvisioningState>[
+      EspProvisioningState(
+        status: EspProvisioningStatus.networkChosen,
+        wifiNetwork: 'home-wifi',
+      ),
+      EspProvisioningState(
+        status: EspProvisioningStatus.wifiProvisioned,
+        wifiNetwork: 'home-wifi',
+        wifiProvisioned: true,
+      ),
+      // The restarted flow must not carry the previous provisioning result.
+      EspProvisioningState(status: EspProvisioningStatus.initial),
+      EspProvisioningState(
+        status: EspProvisioningStatus.bleScanned,
+        bluetoothDevices: const <String>['PROV_1'],
+      ),
+    ],
+  );
+
+  late Completer<bool> victimCancel;
+  blocTest<EspProvisioningBloc, EspProvisioningState>(
+    'handler superseded while awaiting its native cancel stays stale',
+    build: () {
+      victimCancel = Completer<bool>();
+      var cancelCalls = 0;
+      return EspProvisioningBloc(
+        provisioningService: FakeProvisioningService(
+          scanBleDevicesHandler: (_) async => const <String>['fresh-device'],
+          cancelOperationsHandler: () {
+            cancelCalls++;
+            // Park the first handler inside its native-cancel await so a
+            // concurrent start event can supersede it mid-cancel.
+            if (cancelCalls == 1) {
+              return victimCancel.future;
+            }
+            return Future<bool>.value(true);
+          },
+        ),
+        bluetoothPermissionRequest: () async => true,
+        connectTimeout: const Duration(milliseconds: 5),
+        requestTimeout: const Duration(milliseconds: 250),
+      );
+    },
+    act: (bloc) async {
+      bloc.add(const EspProvisioningEventBleSelected('victim', 'pop'));
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      bloc.add(const EspProvisioningEventStart('PROV_'));
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      victimCancel.complete(true);
+    },
+    wait: const Duration(milliseconds: 60),
+    expect: () => <EspProvisioningState>[
+      EspProvisioningState(status: EspProvisioningStatus.initial),
+      EspProvisioningState(
+        status: EspProvisioningStatus.bleScanned,
+        bluetoothDevices: const <String>['fresh-device'],
+      ),
+    ],
+    verify: (bloc) {
+      final service = bloc.espProvisioningService as FakeProvisioningService;
+      // The superseded handler must not start native work after resuming.
+      expect(service.scanWifiNetworksCalls, 0);
+    },
+  );
+
+  blocTest<EspProvisioningBloc, EspProvisioningState>(
+    'emits error when the native cancelOperations fails',
+    build: () => EspProvisioningBloc(
+      provisioningService: FakeProvisioningService(
+        cancelOperationsHandler: () => Future<bool>.error(
+          PlatformException(code: 'E_NATIVE', message: 'channel broken'),
+        ),
+      ),
+      bluetoothPermissionRequest: () async => true,
+      connectTimeout: const Duration(milliseconds: 5),
+      requestTimeout: const Duration(milliseconds: 250),
+    ),
+    act: (bloc) =>
+        bloc.add(const EspProvisioningEventBleSelected('PROV_1', 'pop')),
+    expect: () => <EspProvisioningState>[
+      EspProvisioningState(
+        status: EspProvisioningStatus.error,
+        errorCode: 'E_NATIVE',
+        errorMsg: 'channel broken',
+        failure: EspProvisioningFailure.platform,
+      ),
+    ],
+  );
+
+  test('constructor rejects requestTimeout <= connectTimeout', () {
+    expect(
+      () => EspProvisioningBloc(
+        provisioningService: FakeProvisioningService(),
+        bluetoothPermissionRequest: () async => true,
+        connectTimeout: const Duration(seconds: 15),
+        requestTimeout: const Duration(seconds: 10),
+      ),
+      throwsArgumentError,
+    );
+    expect(
+      () => EspProvisioningBloc(
+        provisioningService: FakeProvisioningService(),
+        bluetoothPermissionRequest: () async => true,
+        requestTimeout: const Duration(seconds: 15),
+      ),
+      throwsArgumentError,
+    );
+  });
+
+  test('close cancels in-flight native operations', () async {
+    final service = FakeProvisioningService(
+      scanBleDevicesHandler: (_) => Completer<List<String>>().future,
+    );
+    final bloc = EspProvisioningBloc(
+      provisioningService: service,
+      bluetoothPermissionRequest: () async => true,
+      connectTimeout: const Duration(milliseconds: 5),
+      requestTimeout: const Duration(milliseconds: 50),
+    );
+    bloc.add(const EspProvisioningEventStart('PROV_'));
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    final callsBeforeClose = service.cancelOperationsCalls;
+    await bloc.close();
+    expect(service.cancelOperationsCalls, callsBeforeClose + 1);
+  });
 }

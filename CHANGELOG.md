@@ -1,3 +1,17 @@
+## 0.3.1
+
+* Alpha: Deliver iOS method channel results exactly once on the main thread (ESPProvision invokes its completion handlers on background queues; replies previously raced unsynchronized guards and could be invoked off the platform thread or twice)
+* Alpha: Resolve superseded/cancelled iOS operations with `E_CANCELLED` immediately, matching Android: the coordinator now tracks the active operation's pending result, and cancelling during a BLE device scan also stops the scan (a superseded iOS `scanBleDevices` previously left its Dart future dangling forever)
+* Alpha: Dismantle a superseded Android connect attempt's EventBus subscriber immediately: a stale subscriber could consume the self-initiated-disconnect credit meant for the successor and spuriously fail a healthy connect with `E_CONNECT`, or permanently over-count disconnect credits
+* Alpha: Note the self-initiated-disconnect credit in Android's connect-error teardown (previously the one plugin-initiated disconnect that skipped it, so a connect-timeout teardown of a live GATT could fail the next attempt)
+* Alpha: Stop in-flight Android BLE device scans on cancellation/supersession instead of letting the radio scan out its window (rapid rescans could hit Android's scan throttle)
+* Alpha: Report device-not-found as `E_DEVICE_NOT_FOUND` on iOS (previously folded into `E_DEVICE`, making `EspProvisioningFailure.deviceNotFound` unreachable on iOS)
+* Alpha: Stop a superseded iOS operation's nil-device teardown from untracking the newer operation's device (which made the newer operation's BLE link undisconnectable on cancel)
+* Alpha: Guard bloc handlers with the operation epoch so a superseded handler's late result or cancellation error no longer overwrites the newer flow's state
+* Alpha: Reset stale flow state (`bluetoothDevice`, `wifiNetworks`, `wifiNetwork`, `wifiProvisioned`) when restarting the flow, choosing a device, or deselecting one
+* Alpha: `EspProvisioningBloc.close()` now cancels in-flight native operations
+* Alpha: `EspProvisioningBloc` rejects `requestTimeout <= connectTimeout` with an `ArgumentError` (such configurations silently masked every typed native error code)
+
 ## 0.3.0
 
 * Alpha: Add Security 2 (SRP6a) support: `scanWifiNetworks`, `provisionWifi`, `fetchCustomData`, and the bloc selection events accept optional `security` (`EspSecurityScheme.security1`/`.security2`) and `username` parameters; Security 2 without a username fails fast with `E0`

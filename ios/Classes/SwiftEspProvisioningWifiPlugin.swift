@@ -8,6 +8,7 @@ private enum ErrorCodes {
     static let bleScanFailed = "E_BLE_SCAN"
     static let connectFailed = "E_CONNECT"
     static let iosDeviceCreate = "E_DEVICE"
+    static let deviceNotFound = "E_DEVICE_NOT_FOUND"
     static let deviceDisconnected = "DEVICE_DISCONNECTED"
     static let customData = "E_CUSTOM_DATA"
     static let cancelled = "E_CANCELLED"
@@ -50,21 +51,49 @@ private final class ProvisionOperationCoordinator {
     private let lock = NSLock()
     private var currentOperationToken = 0
     private var activeDevice: ESPDevice?
+    private var activeService: BLEProvisionService?
 
     func startOperation() -> Int {
         lock.lock()
-        defer { lock.unlock() }
         currentOperationToken += 1
+        let token = currentOperationToken
         disconnectActiveDeviceLocked()
-        return currentOperationToken
+        let superseded = takeActiveServiceLocked()
+        lock.unlock()
+        // Resolve outside the lock: cancellation resolution re-enters
+        // coordinator methods (clearActiveService, isOperationActive).
+        superseded?.resolveCancelled()
+        return token
     }
 
     func cancelOperations() -> Bool {
         lock.lock()
-        defer { lock.unlock() }
         currentOperationToken += 1
         disconnectActiveDeviceLocked()
+        let superseded = takeActiveServiceLocked()
+        lock.unlock()
+        superseded?.resolveCancelled()
         return true
+    }
+
+    func trackActiveService(_ service: BLEProvisionService) {
+        lock.lock()
+        defer { lock.unlock() }
+        activeService = service
+    }
+
+    func clearActiveService(_ service: BLEProvisionService) {
+        lock.lock()
+        defer { lock.unlock() }
+        if activeService === service {
+            activeService = nil
+        }
+    }
+
+    private func takeActiveServiceLocked() -> BLEProvisionService? {
+        let superseded = activeService
+        activeService = nil
+        return superseded
     }
 
     func isOperationActive(_ token: Int) -> Bool {
@@ -82,7 +111,9 @@ private final class ProvisionOperationCoordinator {
     func clearActiveDevice(_ device: ESPDevice?) {
         lock.lock()
         defer { lock.unlock() }
-        if device == nil || activeDevice === device {
+        // Identity match only: a nil device (cancelled create path) must not
+        // wipe a newer operation's tracked device.
+        if let device = device, activeDevice === device {
             activeDevice = nil
         }
     }
@@ -129,6 +160,7 @@ public class SwiftEspProvisioningWifiPlugin: NSObject, FlutterPlugin {
                 security: 1,
                 username: nil
             )
+            coordinator.trackActiveService(provisionService)
             provisionService.searchDevices(prefix: prefix)
         } else if call.method == MethodNames.scanWifiNetworks {
             guard let deviceName = requiredStringArg(ArgumentKeys.deviceName, in: arguments, result: result) else { return }
@@ -143,6 +175,7 @@ public class SwiftEspProvisioningWifiPlugin: NSObject, FlutterPlugin {
                 security: securityArgs.security,
                 username: securityArgs.username
             )
+            coordinator.trackActiveService(provisionService)
             provisionService.scanWifiNetworks(deviceName: deviceName, proofOfPossession: proofOfPossession)
         } else if call.method == MethodNames.provisionWifi {
             guard let deviceName = requiredStringArg(ArgumentKeys.deviceName, in: arguments, result: result) else { return }
@@ -159,6 +192,7 @@ public class SwiftEspProvisioningWifiPlugin: NSObject, FlutterPlugin {
                 security: securityArgs.security,
                 username: securityArgs.username
             )
+            coordinator.trackActiveService(provisionService)
             provisionService.provision(
                 deviceName: deviceName,
                 proofOfPossession: proofOfPossession,
@@ -180,6 +214,7 @@ public class SwiftEspProvisioningWifiPlugin: NSObject, FlutterPlugin {
                 security: securityArgs.security,
                 username: securityArgs.username
             )
+            coordinator.trackActiveService(provisionService)
             provisionService.fetchCustomData(
                 deviceName: deviceName,
                 proofOfPossession: proofOfPossession,
@@ -247,7 +282,13 @@ private class BLEProvisionService: ProvisionService {
     private let connectTimeoutMs: Int
     private let security: Int
     private let username: String?
+    // Main-thread confined: didResolve is only touched in deliverResolution;
+    // deviceSearchStarted is set in searchDevices/connect (called from
+    // handle()), cleared via markDeviceSearchFinished (main-thread hop), and
+    // read in stopDeviceSearchIfStarted (called from the coordinator's
+    // main-thread cancellation).
     private var didResolve = false
+    private var deviceSearchStarted = false
 
     init(
         result: @escaping FlutterResult,
@@ -265,12 +306,55 @@ private class BLEProvisionService: ProvisionService {
         self.username = username
     }
 
+    /// Delivers the FlutterResult exactly once, always on the main thread,
+    /// mirroring Android's OperationResolver: ESPProvision invokes its
+    /// completion handlers on background queues, while platform channel
+    /// replies must be delivered on the platform thread.
     private func resolve(_ value: Any?) {
+        if Thread.isMainThread {
+            deliverResolution(value)
+        } else {
+            DispatchQueue.main.async {
+                self.deliverResolution(value)
+            }
+        }
+    }
+
+    private func deliverResolution(_ value: Any?) {
         if didResolve {
             return
         }
         didResolve = true
+        coordinator.clearActiveService(self)
         result(value)
+    }
+
+    /// Resolves a superseded/cancelled operation with E_CANCELLED so its Dart
+    /// future never dangles. Called by the coordinator on the main thread,
+    /// outside the coordinator lock.
+    fileprivate func resolveCancelled() {
+        stopDeviceSearchIfStarted()
+        resolve(FlutterError(code: ErrorCodes.cancelled, message: "Operation cancelled", details: nil))
+    }
+
+    private func stopDeviceSearchIfStarted() {
+        if !deviceSearchStarted {
+            return
+        }
+        deviceSearchStarted = false
+        // Only safe once searchESPDevices/createESPDevice has run:
+        // stopESPDevicesSearch force-unwraps the manager's BLE transport.
+        ESPProvisionManager.shared.stopESPDevicesSearch()
+    }
+
+    private func markDeviceSearchFinished() {
+        if Thread.isMainThread {
+            deviceSearchStarted = false
+        } else {
+            DispatchQueue.main.async {
+                self.deviceSearchStarted = false
+            }
+        }
     }
 
     private func resolveCancelledIfInactive() -> Bool {
@@ -317,12 +401,24 @@ private class BLEProvisionService: ProvisionService {
             return ErrorCodes.provisionFailed
         }
     }
+
+    /// Maps createESPDevice failures: device-not-found gets the shared
+    /// E_DEVICE_NOT_FOUND contract code (matching Android's scan-cache miss);
+    /// every other creation failure stays E_DEVICE.
+    private static func deviceCreateErrorCode(for error: ESPError) -> String {
+        if let cssError = error as? ESPDeviceCSSError, case .espDeviceNotFound = cssError {
+            return ErrorCodes.deviceNotFound
+        }
+        return ErrorCodes.iosDeviceCreate
+    }
     
     func searchDevices(prefix: String) {
         if resolveCancelledIfInactive() {
             return
         }
+        deviceSearchStarted = true
         ESPProvisionManager.shared.searchESPDevices(devicePrefix: prefix, transport:.ble, security:.secure) { deviceList, error in
+            self.markDeviceSearchFinished()
             if self.resolveCancelledIfInactive() {
                 return
             }
@@ -432,13 +528,17 @@ private class BLEProvisionService: ProvisionService {
             return
         }
         let espSecurity: ESPSecurity = security == 2 ? .secure2 : .secure
+        // createESPDevice runs its own internal BLE scan for the named device;
+        // flag it so a supersession stops that scan too.
+        deviceSearchStarted = true
         ESPProvisionManager.shared.createESPDevice(deviceName: deviceName, transport: .ble, security: espSecurity, proofOfPossession: proofOfPossession, username: username) { espDevice, error in
+            self.markDeviceSearchFinished()
             if self.resolveCancelledIfInactive() {
                 self.disconnect(device: espDevice)
                 return
             }
             if let error = error {
-                self.fail(error: error, code: ErrorCodes.iosDeviceCreate)
+                self.fail(error: error, code: Self.deviceCreateErrorCode(for: error))
                 return
             }
             guard let espDevice = espDevice else {
@@ -449,13 +549,23 @@ private class BLEProvisionService: ProvisionService {
             var connectResolved = false
             var timeoutWorkItem: DispatchWorkItem?
 
-            func resolveConnect(_ block: () -> Void) {
-                if connectResolved {
-                    return
+            // The timeout fires on the main queue while ESPProvision delivers
+            // the connect callback on a background queue; serialize both onto
+            // the main thread so the exactly-once guard is race-free.
+            func resolveConnect(_ block: @escaping () -> Void) {
+                let deliver = {
+                    if connectResolved {
+                        return
+                    }
+                    connectResolved = true
+                    timeoutWorkItem?.cancel()
+                    block()
                 }
-                connectResolved = true
-                timeoutWorkItem?.cancel()
-                block()
+                if Thread.isMainThread {
+                    deliver()
+                } else {
+                    DispatchQueue.main.async(execute: deliver)
+                }
             }
 
             timeoutWorkItem = DispatchWorkItem {
