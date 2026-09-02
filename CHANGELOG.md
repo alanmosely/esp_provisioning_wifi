@@ -11,6 +11,12 @@
 * Alpha: Reset stale flow state (`bluetoothDevice`, `wifiNetworks`, `wifiNetwork`, `wifiProvisioned`) when restarting the flow, choosing a device, or deselecting one
 * Alpha: `EspProvisioningBloc.close()` now cancels in-flight native operations
 * Alpha: `EspProvisioningBloc` rejects `requestTimeout <= connectTimeout` with an `ArgumentError` (such configurations silently masked every typed native error code)
+* Alpha: Add native Android unit tests (OperationResolver exactly-once/main-thread/cancel semantics, Boss token/connect-cancel/credit invariants), gated in CI alongside the example APK build
+* Alpha: Update Android `tink-android` to 1.12.0 (matching upstream esp-idf-provisioning-android) and `protobuf-javalite` to 3.25.5 (covers the parsing DoS advisories in 3.18.0)
+* Alpha: Declare `android.hardware.bluetooth_le` as NOT required so consuming apps are no longer hidden from the Play Store on non-BLE devices; apps requiring BLE should declare it themselves
+* Alpha: A BLE disconnect during the iOS connect phase now reports `E_CONNECT` (matching Android) instead of the iOS-only `DEVICE_DISCONNECTED` code, which is no longer emitted
+* Alpha: Decode non-UTF-8 `fetchCustomData` responses with replacement characters on iOS, matching Android, instead of returning an empty string
+* Alpha: Unknown method names resolve `notImplemented` directly on Android instead of routing through the Bluetooth permission gate
 
 ## 0.3.0
 
@@ -79,26 +85,26 @@ Breaking release, see the migration section in `README.md`.
 * Alpha: Expand method channel and bloc flow test coverage
 * Alpha: Align iOS podspec metadata with package information
 
-## 0.0.1
+## 0.0.6
 
-* Alpha: First release
-
-## 0.0.2
-
-* Alpha: Improvements to pub.dev score
-
-## 0.0.3
-
-* Alpha: Improvements to pub.dev score (again)
-
-## 0.0.4
-
-* Alpha: Correctly report on provisioning success
+* Alpha: Fix iOS compilation errors
 
 ## 0.0.5
 
 * Alpha: Add permission-handler and update to latest flutter_esp_ble_prov
 
-## 0.0.6
+## 0.0.4
 
-* Alpha: Fix iOS compilation errors
+* Alpha: Correctly report on provisioning success
+
+## 0.0.3
+
+* Alpha: Improvements to pub.dev score (again)
+
+## 0.0.2
+
+* Alpha: Improvements to pub.dev score
+
+## 0.0.1
+
+* Alpha: First release

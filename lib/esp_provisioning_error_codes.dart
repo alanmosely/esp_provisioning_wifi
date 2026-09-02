@@ -63,6 +63,8 @@ class EspProvisioningErrorCodes {
   /// iOS device creation failure.
   static const String iosDeviceCreate = 'E_DEVICE';
 
-  /// iOS disconnect/fallback failure.
+  /// Legacy iOS disconnect/fallback failure. No longer emitted since 0.3.1
+  /// (a disconnect during the iOS connect phase now reports [connect],
+  /// matching Android); kept for callers matching on historical codes.
   static const String deviceDisconnected = 'DEVICE_DISCONNECTED';
 }

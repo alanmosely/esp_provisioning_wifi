@@ -50,6 +50,10 @@ Use it to make safe, consistent changes quickly.
     resolved from `local.properties` `flutter.sdk`, then
     `FLUTTER_ROOT`/`FLUTTER_HOME`; the `where flutter` fallback in
     `android/build.gradle` is Windows-only.
+- Kotlin unit tests (Robolectric, in `android/src/test`): run
+  `gradlew :esp_provisioning_wifi:testDebugUnitTest` from `example/android`
+  (the wrapper exists only after a Flutter build has generated it). CI runs
+  this after the example APK build.
 - Swift compile check: only CI's `build-ios-example` job (macOS runner,
   `flutter build ios --debug --no-codesign` in `example/`) compiles the Swift
   plugin — non-Mac dev machines cannot. After any Swift edit, push and wait
@@ -67,7 +71,9 @@ Use it to make safe, consistent changes quickly.
 - `.github/workflows/ci.yml` gates every push to master and every PR:
   `dart format --set-exit-if-changed lib test`, `flutter analyze`,
   `flutter test` (root AND `example/`), `flutter pub publish --dry-run`,
-  `flutter build apk --debug` in `example/` on JDK 17 (Kotlin compile check),
+  `flutter build apk --debug` in `example/` on JDK 17 (Kotlin compile check)
+  followed by the plugin's native unit tests
+  (`./gradlew :esp_provisioning_wifi:testDebugUnitTest` in `example/android`),
   and `flutter build ios --debug --no-codesign` in `example/` on macOS (the
   only Swift compile check). Replicate what you can locally before pushing.
 
@@ -258,6 +264,9 @@ Pinned dependencies (do not upgrade casually):
   - `test/flutter_esp_ble_prov_test.dart`
 - Example app widget smoke test (run from `example/`):
   - `example/test/widget_test.dart`
+- Android native invariants (Robolectric; run via `example/android` gradle):
+  - `android/src/test/kotlin/.../OperationResolverTest.kt`
+  - `android/src/test/kotlin/.../BossTest.kt`
 
 ## Safe Git Workflow
 - Do not revert unrelated working tree changes.

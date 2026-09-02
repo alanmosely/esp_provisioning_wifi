@@ -43,6 +43,11 @@ jobs:
           cache: true
       - run: flutter build apk --debug
         working-directory: example
+      # Native unit tests for the plugin's Kotlin invariants (resolver
+      # exactly-once/main-thread, Boss token/cancel/credit semantics). The
+      # gradle wrapper only exists after the Flutter build above generates it.
+      - run: ./gradlew :esp_provisioning_wifi:testDebugUnitTest
+        working-directory: example/android
 
   # The only place the Swift plugin is compiled; non-Mac dev machines cannot.
   build-ios-example:

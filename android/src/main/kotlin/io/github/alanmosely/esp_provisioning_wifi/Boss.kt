@@ -360,6 +360,18 @@ class Boss {
       return
     }
 
+    val isKnownOperation = call.method == MethodNames.SCAN_BLE_DEVICES ||
+        call.method == MethodNames.SCAN_WIFI_NETWORKS ||
+        call.method == MethodNames.PROVISION_WIFI ||
+        call.method == MethodNames.FETCH_CUSTOM_DATA
+    if (!isKnownOperation) {
+      // Unknown methods must not route through the permission gate (which
+      // could show a Bluetooth permission dialog or resolve E_PERMISSION);
+      // iOS returns notImplemented directly for them too.
+      result.notImplemented()
+      return
+    }
+
     permissionManager.ensure { granted ->
       if (!granted) {
         result.error(ErrorCodes.PERMISSION_DENIED, "Bluetooth permissions not granted", null)

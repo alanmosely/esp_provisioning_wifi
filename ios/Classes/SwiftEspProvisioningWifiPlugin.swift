@@ -9,7 +9,6 @@ private enum ErrorCodes {
     static let connectFailed = "E_CONNECT"
     static let iosDeviceCreate = "E_DEVICE"
     static let deviceNotFound = "E_DEVICE_NOT_FOUND"
-    static let deviceDisconnected = "DEVICE_DISCONNECTED"
     static let customData = "E_CUSTOM_DATA"
     static let cancelled = "E_CANCELLED"
     static let connectTimeout = "E_CONNECT_TIMEOUT"
@@ -512,7 +511,10 @@ private class BLEProvisionService: ProvisionService {
                     self.disconnect(device: device)
                     return
                 }
-                let response = String(data: returnData, encoding: .utf8) ?? ""
+                // Lossy decode (invalid sequences become U+FFFD) to match
+                // Android's String(data, UTF_8) behavior instead of returning
+                // an empty string for non-UTF-8 payloads.
+                let response = String(decoding: returnData, as: UTF8.self)
                 self.resolve(response)
                 self.disconnect(device: device)
             }
@@ -601,7 +603,15 @@ private class BLEProvisionService: ProvisionService {
                         self.fail(error: error, code: ErrorCodes.connectFailed)
                         self.disconnect(device: espDevice)
                     default:
-                        self.resolve(FlutterError(code: ErrorCodes.deviceDisconnected, message: nil, details: nil))
+                        // Parity with Android's connect-phase DISCONNECTED
+                        // handling (Boss.kt): same code, message, and details.
+                        self.resolve(
+                            FlutterError(
+                                code: ErrorCodes.connectFailed,
+                                message: "BLE device disconnected during connect",
+                                details: "ESP device disconnected before the session was established"
+                            )
+                        )
                         self.disconnect(device: espDevice)
                     }
                 }

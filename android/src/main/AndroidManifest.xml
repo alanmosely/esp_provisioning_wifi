@@ -8,6 +8,10 @@
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
         android:usesPermissionFlags="neverForLocation" />
+    <!-- Not required: manifest merging propagates this into every consuming
+         app, and required="true" would hide apps that use provisioning as an
+         optional feature from the Play Store on non-BLE devices. Apps that DO
+         require BLE should declare required="true" themselves. -->
     <uses-feature android:name="android.hardware.bluetooth_le"
-        android:required="true"/>
+        android:required="false"/>
 </manifest>

@@ -73,7 +73,7 @@ The plugin reports stable error codes that the bloc maps into
 - `E_PROV_AUTH`
 - `E_PROV_NETWORK_NOT_FOUND`
 - `E_PROV_FAILED`
-- `DEVICE_DISCONNECTED`
+- `DEVICE_DISCONNECTED` (legacy, no longer emitted since 0.3.1)
 - `E_CANCELLED`
 - `E_TIMEOUT`
 - `E_UNKNOWN`
@@ -85,9 +85,11 @@ Platform note: both platforms emit the granular provisioning codes
 `E_PROV_NETWORK_NOT_FOUND`), with `E_PROV_FAILED` as the fallback. On iOS an
 incorrect proof of possession is typically rejected during the connect phase
 (`E_CONNECT`/`E_DEVICE`, mapped to `EspProvisioningFailure.platform`) rather
-than as `E_PROV_SESSION`. `DEVICE_DISCONNECTED` is iOS-only. Both platforms
-emit `E_DEVICE_NOT_FOUND` when the named device cannot be found (Android from
-its BLE scan cache, iOS from the device search).
+than as `E_PROV_SESSION`. Both platforms emit `E_DEVICE_NOT_FOUND` when the
+named device cannot be found (Android from its BLE scan cache, iOS from the
+device search) and `E_CONNECT` when the device disconnects during the connect
+phase (`DEVICE_DISCONNECTED` is a legacy code, no longer emitted since
+0.3.1).
 
 ## Migration (0.2.x -> 0.3.0)
 
@@ -211,8 +213,11 @@ defaultConfig {
 }
 ```
 
-If your app enforces repositories via `settings.gradle` (`dependencyResolutionManagement`),
-ensure `jitpack.io` is present:
+This plugin resolves the Espressif provisioning library from JitPack, so
+every consuming app's Android build must be able to reach `jitpack.io`. Apps
+using the classic top-level `allprojects { repositories { ... } }` block add
+`maven { url 'https://jitpack.io' }` there; apps enforcing repositories via
+`settings.gradle` (`dependencyResolutionManagement`) add it like this:
 
 ```
 dependencyResolutionManagement {
@@ -226,6 +231,11 @@ dependencyResolutionManagement {
 ```
 
 Bluetooth permissions are automatically requested by the library.
+
+The plugin declares the `android.hardware.bluetooth_le` feature as NOT
+required, so it never hides your app from the Play Store on non-BLE devices.
+If your whole app requires BLE, declare the feature with
+`android:required="true"` in your own manifest.
 
 ### iOS 13.0+
 

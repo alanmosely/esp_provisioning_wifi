@@ -38,6 +38,15 @@ void main() {
         .setMockMethodCallHandler(channel, null);
   });
 
+  test('cancelOperations defaults to true on null response', () async {
+    handler = (MethodCall call) async {
+      expect(call.method, FlutterEspBleProvMethodNames.cancelOperations);
+      return null;
+    };
+
+    expect(await platform.cancelOperations(), isTrue);
+  });
+
   test('scanBleDevices forwards prefix and returns mapped list', () async {
     handler = (MethodCall call) async {
       expect(call.method, FlutterEspBleProvMethodNames.scanBleDevices);

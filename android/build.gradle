@@ -66,10 +66,15 @@ android {
 
     sourceSets {
         main.java.srcDirs += 'src/main/kotlin'
+        test.java.srcDirs += 'src/test/kotlin'
     }
 
     defaultConfig {
         minSdkVersion 23
+    }
+
+    testOptions {
+        unitTests.includeAndroidResources = true
     }
 }
 
@@ -77,12 +82,23 @@ dependencies {
     implementation 'androidx.core:core:1.13.1'
     implementation 'androidx.annotation:annotation:1.9.1'
     implementation 'org.greenrobot:eventbus:3.3.1'
-    implementation 'com.google.crypto.tink:tink-android:1.6.1'
-    implementation 'com.google.protobuf:protobuf-javalite:3.18.0'
+    // tink 1.12.0 matches what upstream esp-idf-provisioning-android master
+    // pairs with this provisioning code; protobuf-javalite 3.25.5 is the
+    // patched 3.x runtime (>= the lib's protoc-3.21.9-generated classes;
+    // upstream declared only a 3.18.0 runtime) covering the parsing DoS
+    // advisories in 3.18.0.
+    implementation 'com.google.crypto.tink:tink-android:1.12.0'
+    implementation 'com.google.protobuf:protobuf-javalite:3.25.5'
     implementation 'com.github.espressif:esp-idf-provisioning-android:lib-2.1.2'
+
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.robolectric:robolectric:4.11.1'
 
     if (flutterJar != null && flutterJar.exists()) {
         compileOnly files(flutterJar.absolutePath)
+        // Unit tests exercise MethodChannel.Result, so the embedding must be
+        // on the test runtime classpath too (compileOnly is compile-time only).
+        testImplementation files(flutterJar.absolutePath)
     } else {
         logger.warn('Flutter embedding jar was not found. Standalone Gradle compile may fail. Resolved flutterSdkPath=' + flutterSdkPath)
     }

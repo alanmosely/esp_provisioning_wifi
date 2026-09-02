@@ -411,6 +411,14 @@ void main() {
     EspProvisioningErrorCodes.provisioningFailed:
         EspProvisioningFailure.provisioningFailed,
     EspProvisioningErrorCodes.connectTimeout: EspProvisioningFailure.timeout,
+    EspProvisioningErrorCodes.deviceNotFound:
+        EspProvisioningFailure.deviceNotFound,
+    EspProvisioningErrorCodes.invalidResponse:
+        EspProvisioningFailure.invalidResponse,
+    EspProvisioningErrorCodes.permission:
+        EspProvisioningFailure.permissionDenied,
+    // Unmapped native codes must degrade to the generic platform failure.
+    'E_FUTURE_UNKNOWN_CODE': EspProvisioningFailure.platform,
   }.entries) {
     blocTest<EspProvisioningBloc, EspProvisioningState>(
       'maps native ${entry.key} to ${entry.value}',
@@ -747,6 +755,96 @@ void main() {
         errorCode: 'E_NATIVE',
         errorMsg: 'channel broken',
         failure: EspProvisioningFailure.platform,
+      ),
+    ],
+  );
+
+  blocTest<EspProvisioningBloc, EspProvisioningState>(
+    'emits error status and timeout failure when BLE scan exceeds timeout',
+    build: () => EspProvisioningBloc(
+      provisioningService: FakeProvisioningService(
+        scanBleDevicesHandler: (_) => Completer<List<String>>().future,
+      ),
+      bluetoothPermissionRequest: () async => true,
+      connectTimeout: const Duration(milliseconds: 5),
+      requestTimeout: const Duration(milliseconds: 10),
+    ),
+    act: (bloc) => bloc.add(const EspProvisioningEventStart('PROV_')),
+    wait: const Duration(milliseconds: 30),
+    expect: () => <EspProvisioningState>[
+      EspProvisioningState(status: EspProvisioningStatus.initial),
+      EspProvisioningState(
+        status: EspProvisioningStatus.error,
+        errorCode: EspProvisioningErrorCodes.timeout,
+        errorDetails: 'scanBleDevices timeout after 0:00:00.010000',
+        errorMsg: 'BLE scan timed out',
+        failure: EspProvisioningFailure.timeout,
+      ),
+    ],
+  );
+
+  blocTest<EspProvisioningBloc, EspProvisioningState>(
+    'emits error status and timeout failure when provisioning exceeds timeout',
+    build: () => EspProvisioningBloc(
+      provisioningService: FakeProvisioningService(
+        provisionWifiHandler: (_, __, ___, ____) => Completer<bool>().future,
+      ),
+      bluetoothPermissionRequest: () async => true,
+      connectTimeout: const Duration(milliseconds: 5),
+      requestTimeout: const Duration(milliseconds: 10),
+    ),
+    act: (bloc) => bloc.add(const EspProvisioningEventWifiSelected(
+      'PROV_1',
+      'pop',
+      'home-wifi',
+      'secret',
+    )),
+    wait: const Duration(milliseconds: 30),
+    expect: () => <EspProvisioningState>[
+      EspProvisioningState(
+        status: EspProvisioningStatus.networkChosen,
+        wifiNetwork: 'home-wifi',
+      ),
+      EspProvisioningState(
+        status: EspProvisioningStatus.error,
+        wifiNetwork: 'home-wifi',
+        errorCode: EspProvisioningErrorCodes.timeout,
+        errorDetails: 'provisionWifi timeout after 0:00:00.010000',
+        errorMsg: 'WiFi provisioning timed out',
+        failure: EspProvisioningFailure.timeout,
+      ),
+    ],
+  );
+
+  blocTest<EspProvisioningBloc, EspProvisioningState>(
+    'falls back to a code-derived message when the platform error has none',
+    build: () => EspProvisioningBloc(
+      provisioningService: FakeProvisioningService(
+        provisionWifiHandler: (_, __, ___, ____) => Future<bool>.error(
+          PlatformException(code: EspProvisioningErrorCodes.provisioningFailed),
+        ),
+      ),
+      bluetoothPermissionRequest: () async => true,
+      connectTimeout: const Duration(milliseconds: 5),
+      requestTimeout: const Duration(milliseconds: 250),
+    ),
+    act: (bloc) => bloc.add(const EspProvisioningEventWifiSelected(
+      'PROV_1',
+      'pop',
+      'home-wifi',
+      'secret',
+    )),
+    expect: () => <EspProvisioningState>[
+      EspProvisioningState(
+        status: EspProvisioningStatus.networkChosen,
+        wifiNetwork: 'home-wifi',
+      ),
+      EspProvisioningState(
+        status: EspProvisioningStatus.error,
+        wifiNetwork: 'home-wifi',
+        errorCode: EspProvisioningErrorCodes.provisioningFailed,
+        errorMsg: 'Platform error: E_PROV_FAILED',
+        failure: EspProvisioningFailure.provisioningFailed,
       ),
     ],
   );
