@@ -14,4 +14,6 @@ object ArgumentNames {
   const val CONNECT_TIMEOUT_MS = "connectTimeoutMs"
   const val ENDPOINT = "endpoint"
   const val PAYLOAD = "payload"
+  const val SECURITY = "security"
+  const val USERNAME = "username"
 }

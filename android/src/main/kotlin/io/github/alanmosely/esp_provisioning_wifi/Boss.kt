@@ -144,18 +144,28 @@ class Boss {
 
   /**
    * Connect to a named device with proofOfPossession string, and once connected, execute callback.
+   *
+   * [security] selects the provisioning scheme (1 = Security 1, 2 = Security 2);
+   * Security 2 requires the SRP6a [username] configured in the firmware.
    */
   fun connect(
       conn: BleConnector,
       proofOfPossession: String,
+      security: Int,
+      username: String?,
       operationToken: Int,
       connectTimeoutMs: Long,
       onConnectCallback: (ESPDevice) -> Unit,
       onErrorCallback: (String, String, String?) -> Unit
   ) {
+    val securityType = if (security == 2) {
+      ESPConstants.SecurityType.SECURITY_2
+    } else {
+      ESPConstants.SecurityType.SECURITY_1
+    }
     val esp = espManager.createESPDevice(
         ESPConstants.TransportType.TRANSPORT_BLE,
-        ESPConstants.SecurityType.SECURITY_1)
+        securityType)
     trackActiveDevice(esp)
     val mainHandler = Handler(Looper.getMainLooper())
     val bus = EventBus.getDefault()
@@ -218,6 +228,9 @@ class Boss {
               return
             }
             esp.proofOfPossession = proofOfPossession
+            if (!username.isNullOrEmpty()) {
+              esp.userName = username
+            }
             onConnectCallback(esp)
           }
           ESPConstants.EVENT_DEVICE_CONNECTION_FAILED -> {

@@ -1,4 +1,5 @@
 import 'package:esp_provisioning_wifi/esp_provisioning_error_codes.dart';
+import 'package:esp_provisioning_wifi/esp_security_scheme.dart';
 import 'package:esp_provisioning_wifi/esp_wifi_network.dart';
 import 'package:esp_provisioning_wifi/src/flutter_esp_ble_prov/flutter_esp_ble_prov_method_channel.dart';
 import 'package:esp_provisioning_wifi/src/flutter_esp_ble_prov/flutter_esp_ble_prov_method_names.dart';
@@ -54,6 +55,7 @@ void main() {
       expect(call.arguments, {
         'deviceName': 'PROV_01',
         'proofOfPossession': 'abcd1234',
+        FlutterEspBleProvMethodNames.securityArg: 1,
       });
       return <Object?>[
         <Object?, Object?>{'ssid': 'home-wifi', 'rssi': -45, 'security': 3},
@@ -80,6 +82,7 @@ void main() {
         'proofOfPossession': 'abcd1234',
         'ssid': 'home-wifi',
         'passphrase': 'secret',
+        FlutterEspBleProvMethodNames.securityArg: 1,
       });
       return true;
     };
@@ -100,6 +103,7 @@ void main() {
       expect(call.arguments, {
         'deviceName': 'PROV_01',
         'proofOfPossession': 'abcd1234',
+        FlutterEspBleProvMethodNames.securityArg: 1,
         FlutterEspBleProvMethodNames.connectTimeoutMsArg: 5000,
       });
       return <Object?>[];
@@ -121,6 +125,7 @@ void main() {
         'proofOfPossession': 'abcd1234',
         'ssid': 'home-wifi',
         'passphrase': 'secret',
+        FlutterEspBleProvMethodNames.securityArg: 1,
         FlutterEspBleProvMethodNames.connectTimeoutMsArg: 3000,
       });
       return true;
@@ -202,6 +207,66 @@ void main() {
     );
   });
 
+  test('forwards Security 2 scheme and username when provided', () async {
+    handler = (MethodCall call) async {
+      if (call.method == FlutterEspBleProvMethodNames.scanWifiNetworks) {
+        expect(call.arguments, {
+          'deviceName': 'PROV_01',
+          'proofOfPossession': 'abcd1234',
+          FlutterEspBleProvMethodNames.securityArg: 2,
+          FlutterEspBleProvMethodNames.usernameArg: 'wifiprov',
+        });
+        return <Object?>[];
+      }
+      if (call.method == FlutterEspBleProvMethodNames.provisionWifi) {
+        expect(call.arguments, {
+          'deviceName': 'PROV_01',
+          'proofOfPossession': 'abcd1234',
+          'ssid': 'home-wifi',
+          'passphrase': 'secret',
+          FlutterEspBleProvMethodNames.securityArg: 2,
+          FlutterEspBleProvMethodNames.usernameArg: 'wifiprov',
+        });
+        return true;
+      }
+      if (call.method == FlutterEspBleProvMethodNames.fetchCustomData) {
+        expect(call.arguments, {
+          'deviceName': 'PROV_01',
+          'proofOfPossession': 'abcd1234',
+          FlutterEspBleProvMethodNames.endpointArg: 'custom-data',
+          FlutterEspBleProvMethodNames.payloadArg: '',
+          FlutterEspBleProvMethodNames.securityArg: 2,
+          FlutterEspBleProvMethodNames.usernameArg: 'wifiprov',
+        });
+        return '{}';
+      }
+      throw UnimplementedError(call.method);
+    };
+
+    await platform.scanWifiNetworks(
+      'PROV_01',
+      'abcd1234',
+      security: EspSecurityScheme.security2,
+      username: 'wifiprov',
+    );
+    final provisioned = await platform.provisionWifi(
+      'PROV_01',
+      'abcd1234',
+      'home-wifi',
+      'secret',
+      security: EspSecurityScheme.security2,
+      username: 'wifiprov',
+    );
+    expect(provisioned, isTrue);
+    final custom = await platform.fetchCustomData(
+      'PROV_01',
+      'abcd1234',
+      security: EspSecurityScheme.security2,
+      username: 'wifiprov',
+    );
+    expect(custom, '{}');
+  });
+
   test('cancelOperations forwards to native and returns bool', () async {
     handler = (MethodCall call) async {
       expect(call.method, FlutterEspBleProvMethodNames.cancelOperations);
@@ -220,6 +285,7 @@ void main() {
         'proofOfPossession': 'abcd1234',
         FlutterEspBleProvMethodNames.endpointArg: 'custom-data',
         FlutterEspBleProvMethodNames.payloadArg: '',
+        FlutterEspBleProvMethodNames.securityArg: 1,
       });
       return '{"softapPassword":"pw123"}';
     };
@@ -239,6 +305,7 @@ void main() {
         'proofOfPossession': 'abcd1234',
         FlutterEspBleProvMethodNames.endpointArg: 'custom-data',
         FlutterEspBleProvMethodNames.payloadArg: '',
+        FlutterEspBleProvMethodNames.securityArg: 1,
         FlutterEspBleProvMethodNames.connectTimeoutMsArg: 7000,
       });
       return '{}';

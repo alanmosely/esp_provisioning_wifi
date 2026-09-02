@@ -1,3 +1,10 @@
+## 0.3.0
+
+* Alpha: Add Security 2 (SRP6a) support: `scanWifiNetworks`, `provisionWifi`, `fetchCustomData`, and the bloc selection events accept optional `security` (`EspSecurityScheme.security1`/`.security2`) and `username` parameters; Security 2 without a username fails fast with `E0`
+* Alpha: Populate `EspWifiNetwork.rssi` and `security` on iOS (previously Android-only)
+* Alpha: Emit the granular provisioning error codes (`E_PROV_SESSION`, `E_PROV_CONFIG`, `E_PROV_AUTH`, `E_PROV_NETWORK_NOT_FOUND`) on iOS (previously Android-only; iOS reported only `E_PROV_FAILED`)
+* Alpha: `scanWifiNetworks`/`provisionWifi`/`fetchCustomData` signatures gained the new named parameters - any override (custom `FlutterEspBleProvPlatform` implementations, or test fakes extending `FlutterEspBleProv`) must add them
+
 ## 0.2.1
 
 * Alpha: Clear the Android activity reference on lifecycle detach so a permission request can no longer be issued against a destroyed Activity (which left the method call unresolved and leaked the Activity); new checks now fail fast with `E_PERMISSION` while detached

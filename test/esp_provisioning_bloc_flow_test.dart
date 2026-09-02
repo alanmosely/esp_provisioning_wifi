@@ -36,6 +36,10 @@ class FakeProvisioningService extends FlutterEspBleProv {
   int cancelOperationsCalls = 0;
   Duration? lastScanConnectTimeout;
   Duration? lastProvisionConnectTimeout;
+  EspSecurityScheme? lastScanSecurity;
+  String? lastScanUsername;
+  EspSecurityScheme? lastProvisionSecurity;
+  String? lastProvisionUsername;
 
   @override
   Future<List<String>> scanBleDevices(String prefix) {
@@ -50,10 +54,14 @@ class FakeProvisioningService extends FlutterEspBleProv {
   Future<List<EspWifiNetwork>> scanWifiNetworks(
     String deviceName,
     String proofOfPossession, {
+    EspSecurityScheme security = EspSecurityScheme.security1,
+    String? username,
     Duration? connectTimeout,
   }) {
     scanWifiNetworksCalls++;
     lastScanConnectTimeout = connectTimeout;
+    lastScanSecurity = security;
+    lastScanUsername = username;
     if (_scanWifiNetworksHandler == null) {
       return Future<List<EspWifiNetwork>>.value(const <EspWifiNetwork>[]);
     }
@@ -66,10 +74,14 @@ class FakeProvisioningService extends FlutterEspBleProv {
     String proofOfPossession,
     String ssid,
     String passphrase, {
+    EspSecurityScheme security = EspSecurityScheme.security1,
+    String? username,
     Duration? connectTimeout,
   }) {
     provisionWifiCalls++;
     lastProvisionConnectTimeout = connectTimeout;
+    lastProvisionSecurity = security;
+    lastProvisionUsername = username;
     if (_provisionWifiHandler == null) {
       return Future<bool>.value(false);
     }
@@ -439,6 +451,38 @@ void main() {
       final service = bloc.espProvisioningService as FakeProvisioningService;
       expect(service.lastScanConnectTimeout, const Duration(seconds: 5));
       expect(service.lastProvisionConnectTimeout, const Duration(seconds: 5));
+    },
+  );
+
+  blocTest<EspProvisioningBloc, EspProvisioningState>(
+    'passes the event security scheme and username through to the service',
+    build: () => EspProvisioningBloc(
+      provisioningService: FakeProvisioningService(),
+      bluetoothPermissionRequest: () async => true,
+    ),
+    act: (bloc) async {
+      bloc.add(const EspProvisioningEventBleSelected(
+        'PROV_1',
+        'abcd1234',
+        security: EspSecurityScheme.security2,
+        username: 'wifiprov',
+      ));
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      bloc.add(const EspProvisioningEventWifiSelected(
+        'PROV_1',
+        'abcd1234',
+        'home-wifi',
+        'secret',
+        security: EspSecurityScheme.security2,
+        username: 'wifiprov',
+      ));
+    },
+    verify: (bloc) {
+      final service = bloc.espProvisioningService as FakeProvisioningService;
+      expect(service.lastScanSecurity, EspSecurityScheme.security2);
+      expect(service.lastScanUsername, 'wifiprov');
+      expect(service.lastProvisionSecurity, EspSecurityScheme.security2);
+      expect(service.lastProvisionUsername, 'wifiprov');
     },
   );
 

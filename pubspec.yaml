@@ -1,7 +1,7 @@
 name: esp_provisioning_wifi
 description: Provision WiFi on Espressif ESP32 devices over Bluetooth LE from Flutter,
   with a Bloc API and native Android and iOS provisioning implementations.
-version: 0.2.1
+version: 0.3.0
 repository: https://github.com/alanmosely/esp_provisioning_wifi
 issue_tracker: https://github.com/alanmosely/esp_provisioning_wifi/issues
 

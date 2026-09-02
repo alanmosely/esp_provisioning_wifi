@@ -40,8 +40,8 @@ enum EspWifiSecurity {
 
 /// A WiFi network reported by an ESP device during provisioning.
 ///
-/// [rssi] and [security] are currently reported by Android only; iOS returns
-/// them as null.
+/// Both platforms populate [rssi] and [security]; they are nullable only for
+/// tolerant decoding of unexpected payloads.
 class EspWifiNetwork extends Equatable {
   const EspWifiNetwork({
     required this.ssid,

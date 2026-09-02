@@ -13,4 +13,6 @@ class FlutterEspBleProvMethodNames {
   static const String connectTimeoutMsArg = 'connectTimeoutMs';
   static const String endpointArg = 'endpoint';
   static const String payloadArg = 'payload';
+  static const String securityArg = 'security';
+  static const String usernameArg = 'username';
 }

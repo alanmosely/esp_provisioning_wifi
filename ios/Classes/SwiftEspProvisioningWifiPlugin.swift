@@ -13,6 +13,10 @@ private enum ErrorCodes {
     static let cancelled = "E_CANCELLED"
     static let connectTimeout = "E_CONNECT_TIMEOUT"
     static let provisionFailed = "E_PROV_FAILED"
+    static let provisionSessionFailed = "E_PROV_SESSION"
+    static let provisionConfigFailed = "E_PROV_CONFIG"
+    static let provisionAuthFailed = "E_PROV_AUTH"
+    static let provisionNetworkNotFound = "E_PROV_NETWORK_NOT_FOUND"
 }
 
 private enum MethodNames {
@@ -34,6 +38,8 @@ private enum ArgumentKeys {
     static let endpoint = "endpoint"
     static let payload = "payload"
     static let connectTimeoutMs = "connectTimeoutMs"
+    static let security = "security"
+    static let username = "username"
 }
 
 private enum TimeoutDefaults {
@@ -119,18 +125,23 @@ public class SwiftEspProvisioningWifiPlugin: NSObject, FlutterPlugin {
                 result: result,
                 coordinator: coordinator,
                 operationToken: coordinator.startOperation(),
-                connectTimeoutMs: TimeoutDefaults.connectTimeoutMs
+                connectTimeoutMs: TimeoutDefaults.connectTimeoutMs,
+                security: 1,
+                username: nil
             )
             provisionService.searchDevices(prefix: prefix)
         } else if call.method == MethodNames.scanWifiNetworks {
             guard let deviceName = requiredStringArg(ArgumentKeys.deviceName, in: arguments, result: result) else { return }
             guard let proofOfPossession = requiredStringArg(ArgumentKeys.proofOfPossession, in: arguments, result: result) else { return }
+            guard let securityArgs = securityArgs(in: arguments, result: result) else { return }
             let connectTimeoutMs = optionalConnectTimeoutMs(in: arguments)
             let provisionService = BLEProvisionService(
                 result: result,
                 coordinator: coordinator,
                 operationToken: coordinator.startOperation(),
-                connectTimeoutMs: connectTimeoutMs
+                connectTimeoutMs: connectTimeoutMs,
+                security: securityArgs.security,
+                username: securityArgs.username
             )
             provisionService.scanWifiNetworks(deviceName: deviceName, proofOfPossession: proofOfPossession)
         } else if call.method == MethodNames.provisionWifi {
@@ -138,12 +149,15 @@ public class SwiftEspProvisioningWifiPlugin: NSObject, FlutterPlugin {
             guard let proofOfPossession = requiredStringArg(ArgumentKeys.proofOfPossession, in: arguments, result: result) else { return }
             guard let ssid = requiredStringArg(ArgumentKeys.ssid, in: arguments, result: result) else { return }
             guard let passphrase = requiredStringArg(ArgumentKeys.passphrase, in: arguments, result: result) else { return }
+            guard let securityArgs = securityArgs(in: arguments, result: result) else { return }
             let connectTimeoutMs = optionalConnectTimeoutMs(in: arguments)
             let provisionService = BLEProvisionService(
                 result: result,
                 coordinator: coordinator,
                 operationToken: coordinator.startOperation(),
-                connectTimeoutMs: connectTimeoutMs
+                connectTimeoutMs: connectTimeoutMs,
+                security: securityArgs.security,
+                username: securityArgs.username
             )
             provisionService.provision(
                 deviceName: deviceName,
@@ -155,13 +169,16 @@ public class SwiftEspProvisioningWifiPlugin: NSObject, FlutterPlugin {
             guard let deviceName = requiredStringArg(ArgumentKeys.deviceName, in: arguments, result: result) else { return }
             guard let proofOfPossession = requiredStringArg(ArgumentKeys.proofOfPossession, in: arguments, result: result) else { return }
             guard let endpoint = requiredStringArg(ArgumentKeys.endpoint, in: arguments, result: result) else { return }
+            guard let securityArgs = securityArgs(in: arguments, result: result) else { return }
             let payload = arguments[ArgumentKeys.payload] as? String ?? ""
             let connectTimeoutMs = optionalConnectTimeoutMs(in: arguments)
             let provisionService = BLEProvisionService(
                 result: result,
                 coordinator: coordinator,
                 operationToken: coordinator.startOperation(),
-                connectTimeoutMs: connectTimeoutMs
+                connectTimeoutMs: connectTimeoutMs,
+                security: securityArgs.security,
+                username: securityArgs.username
             )
             provisionService.fetchCustomData(
                 deviceName: deviceName,
@@ -172,6 +189,25 @@ public class SwiftEspProvisioningWifiPlugin: NSObject, FlutterPlugin {
         } else {
             result(FlutterMethodNotImplemented)
         }
+    }
+
+    private func securityArgs(
+        in arguments: [String: Any],
+        result: @escaping FlutterResult
+    ) -> (security: Int, username: String?)? {
+        let security = (arguments[ArgumentKeys.security] as? NSNumber)?.intValue ?? 1
+        let username = arguments[ArgumentKeys.username] as? String
+        if security == 2 && (username == nil || username!.isEmpty) {
+            result(
+                FlutterError(
+                    code: ErrorCodes.missingArgument,
+                    message: "Missing argument: username",
+                    details: "Security 2 requires the SRP6a username configured in the firmware"
+                )
+            )
+            return nil
+        }
+        return (security, username)
     }
 
     private func requiredStringArg(
@@ -209,18 +245,24 @@ private class BLEProvisionService: ProvisionService {
     private let coordinator: ProvisionOperationCoordinator
     private let operationToken: Int
     private let connectTimeoutMs: Int
+    private let security: Int
+    private let username: String?
     private var didResolve = false
-    
+
     init(
         result: @escaping FlutterResult,
         coordinator: ProvisionOperationCoordinator,
         operationToken: Int,
-        connectTimeoutMs: Int
+        connectTimeoutMs: Int,
+        security: Int,
+        username: String?
     ) {
         self.result = result
         self.coordinator = coordinator
         self.operationToken = operationToken
         self.connectTimeoutMs = connectTimeoutMs
+        self.security = security
+        self.username = username
     }
 
     private func resolve(_ value: Any?) {
@@ -256,6 +298,25 @@ private class BLEProvisionService: ProvisionService {
         device?.disconnect()
         coordinator.clearActiveDevice(device)
     }
+
+    /// Maps provisioning-phase failures to the shared E_PROV_* contract codes.
+    private static func provisionErrorCode(for error: ESPError) -> String {
+        guard let provisionError = error as? ESPProvisionError else {
+            return ErrorCodes.provisionFailed
+        }
+        switch provisionError {
+        case .sessionError:
+            return ErrorCodes.provisionSessionFailed
+        case .configurationError:
+            return ErrorCodes.provisionConfigFailed
+        case .wifiStatusAuthenticationError:
+            return ErrorCodes.provisionAuthFailed
+        case .wifiStatusNetworkNotFound:
+            return ErrorCodes.provisionNetworkNotFound
+        default:
+            return ErrorCodes.provisionFailed
+        }
+    }
     
     func searchDevices(prefix: String) {
         if resolveCancelledIfInactive() {
@@ -289,9 +350,12 @@ private class BLEProvisionService: ProvisionService {
                     self.disconnect(device: device)
                     return
                 }
-                // rssi/security enrichment is pending; Dart treats missing keys as null.
                 self.resolve((wifiList ?? []).map({ (network: ESPWifiNetwork) -> [String: Any] in
-                    return ["ssid": network.ssid]
+                    return [
+                        "ssid": network.ssid,
+                        "rssi": Int(network.rssi),
+                        "security": network.auth.rawValue,
+                    ]
                 }))
                 self.disconnect(device: device)
             }
@@ -315,7 +379,7 @@ private class BLEProvisionService: ProvisionService {
                     NSLog("Wi-Fi config applied")
                 case .failure(let error):
                     NSLog("Device provisioning failed")
-                    self.fail(error: error, code: ErrorCodes.provisionFailed)
+                    self.fail(error: error, code: Self.provisionErrorCode(for: error))
                     self.disconnect(device: device)
                 }
             }
@@ -367,7 +431,8 @@ private class BLEProvisionService: ProvisionService {
         if resolveCancelledIfInactive() {
             return
         }
-        ESPProvisionManager.shared.createESPDevice(deviceName: deviceName, transport: .ble, security: .secure, proofOfPossession: proofOfPossession) { espDevice, error in
+        let espSecurity: ESPSecurity = security == 2 ? .secure2 : .secure
+        ESPProvisionManager.shared.createESPDevice(deviceName: deviceName, transport: .ble, security: espSecurity, proofOfPossession: proofOfPossession, username: username) { espDevice, error in
             if self.resolveCancelledIfInactive() {
                 self.disconnect(device: espDevice)
                 return

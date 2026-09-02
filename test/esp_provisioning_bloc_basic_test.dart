@@ -32,6 +32,8 @@ class _FakeProvisioningService extends FlutterEspBleProv {
   Future<List<EspWifiNetwork>> scanWifiNetworks(
     String deviceName,
     String proofOfPossession, {
+    EspSecurityScheme security = EspSecurityScheme.security1,
+    String? username,
     Duration? connectTimeout,
   }) {
     if (_scanWifiNetworksHandler == null) {
@@ -46,6 +48,8 @@ class _FakeProvisioningService extends FlutterEspBleProv {
     String proofOfPossession,
     String ssid,
     String passphrase, {
+    EspSecurityScheme security = EspSecurityScheme.security1,
+    String? username,
     Duration? connectTimeout,
   }) {
     if (_provisionWifiHandler == null) {

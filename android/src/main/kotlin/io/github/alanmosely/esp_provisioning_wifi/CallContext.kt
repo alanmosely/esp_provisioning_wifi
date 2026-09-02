@@ -47,4 +47,10 @@ class CallContext(val call: MethodCall, val result: Result) {
         ?.toLong()
         ?: Boss.DEFAULT_CONNECT_TIMEOUT_MS
   }
+
+  /**
+   * Extracts the optional security scheme (1 = Security 1, 2 = Security 2),
+   * defaulting to Security 1.
+   */
+  fun security(): Int = optionalInt(ArgumentNames.SECURITY) ?: 1
 }

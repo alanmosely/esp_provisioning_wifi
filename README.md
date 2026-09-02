@@ -18,10 +18,16 @@ Library to provision WiFi on ESP32 devices over Bluetooth, using Bloc.
 - `scanBleDevices(prefix)` returns `Future<List<String>>` of matching device
   names and must run before `scanWifiNetworks`/`provisionWifi`.
 - `scanWifiNetworks(...)` returns `Future<List<EspWifiNetwork>>`.
-  - Each network exposes `ssid` (`String`), plus `rssi` (dBm, `int?`) and
+  - Each network exposes `ssid` (`String`), `rssi` (dBm, `int?`) and
     `security` (a typed `EspWifiSecurity` enum mirroring Espressif's
-    `WifiAuthMode`) where the platform reports them (currently Android only;
-    null on iOS).
+    `WifiAuthMode`), populated on both platforms.
+- `scanWifiNetworks(...)`, `provisionWifi(...)` and `fetchCustomData(...)`
+  accept `security: EspSecurityScheme.security1` (default) or `.security2`.
+  - Security 2 (SRP6a) additionally requires the `username` configured in the
+    firmware; omitting it fails fast with `E0`.
+  - The bloc events `EspProvisioningEventBleSelected` and
+    `EspProvisioningEventWifiSelected` take the same optional `security` and
+    `username` parameters.
 - `provisionWifi(...)` returns `Future<bool>`.
   - It resolves `true` on success and throws a `PlatformException` with a typed
     error code on failure: `E_PROV_*` for provisioning-phase failures, or a
@@ -40,7 +46,7 @@ Library to provision WiFi on ESP32 devices over Bluetooth, using Bloc.
   and `requestTimeout` (overall operation budget, default `connectTimeout` + 20s).
 - Dart-side request timeouts cancel the in-flight native operation and emit
   `status: EspProvisioningStatus.error` with `failure == EspProvisioningFailure.timeout`.
-- `fetchCustomData(deviceName, proofOfPossession, {endpoint = 'custom-data', payload = '', connectTimeout})`
+- `fetchCustomData(deviceName, proofOfPossession, {endpoint = 'custom-data', payload = '', security, username, connectTimeout})`
   returns `Future<String?>` and reads provisioning custom endpoint payloads.
   - Service-level only (there is no bloc event for it); failures throw `E_CUSTOM_DATA`.
   - Useful for firmware-driven provisioning metadata such as lock state or SoftAP password hints.
@@ -74,13 +80,29 @@ The plugin reports stable error codes that the bloc maps into
 
 Import: `package:esp_provisioning_wifi/esp_provisioning_error_codes.dart`.
 
-Platform note: the granular provisioning codes (`E_PROV_SESSION`,
-`E_PROV_CONFIG`, `E_PROV_AUTH`, `E_PROV_NETWORK_NOT_FOUND`) are currently
-emitted by Android only. iOS reports provisioning failures as `E_PROV_FAILED`
-(`EspProvisioningFailure.provisioningFailed`) and rejects an incorrect proof of
-possession during the connect phase (`E_CONNECT`/`E_DEVICE`, mapped to
-`EspProvisioningFailure.platform`). `DEVICE_DISCONNECTED` is iOS-only;
+Platform note: both platforms emit the granular provisioning codes
+(`E_PROV_SESSION`, `E_PROV_CONFIG`, `E_PROV_AUTH`,
+`E_PROV_NETWORK_NOT_FOUND`), with `E_PROV_FAILED` as the fallback. On iOS an
+incorrect proof of possession is typically rejected during the connect phase
+(`E_CONNECT`/`E_DEVICE`, mapped to `EspProvisioningFailure.platform`) rather
+than as `E_PROV_SESSION`. `DEVICE_DISCONNECTED` is iOS-only;
 `E_DEVICE_NOT_FOUND` is Android-only.
+
+## Migration (0.2.x -> 0.3.0)
+
+1. Security 2 (SRP6a) support: `scanWifiNetworks`, `provisionWifi`,
+   `fetchCustomData`, and the bloc selection events accept optional
+   `security` (`EspSecurityScheme`) and `username` parameters. Defaults are
+   unchanged (Security 1), so existing call sites keep working.
+2. iOS now populates `EspWifiNetwork.rssi`/`security` and emits the granular
+   `E_PROV_*` codes; code that special-cased their absence on iOS can be
+   simplified.
+3. Any class that overrides `scanWifiNetworks`, `provisionWifi`, or
+   `fetchCustomData` — custom `FlutterEspBleProvPlatform` implementations,
+   or test fakes extending `FlutterEspBleProv` (e.g. injected into
+   `EspProvisioningBloc`) — must add the new `security`/`username` named
+   parameters to its overrides. Classes that don't override those methods
+   are unaffected.
 
 ## Migration (0.1.x -> 0.2.0)
 
@@ -159,12 +181,18 @@ bloc.add(const EspProvisioningEventWifiSelected(
 ### Device firmware requirements
 
 The ESP32 must run Espressif's BLE provisioning scheme (e.g. `wifi_prov_mgr`
-from ESP-IDF, or the Arduino `WiFiProv` demo) using **Security 1**, which
-requires a proof-of-possession (PoP) string. Pass the same PoP your firmware
-was configured with (the Espressif demos default to `abcd1234`, with device
-names prefixed `PROV_`). On Android a wrong PoP surfaces as `E_PROV_SESSION`
-(`EspProvisioningFailure.sessionFailed`); on iOS it fails during connect.
-Security 0 and Security 2 firmware are not currently supported.
+from ESP-IDF, or the Arduino `WiFiProv` demo) using **Security 1** (the
+default) or **Security 2**:
+
+- Security 1 requires a proof-of-possession (PoP) string. Pass the same PoP
+  your firmware was configured with (the Espressif demos default to
+  `abcd1234`, with device names prefixed `PROV_`).
+- Security 2 (SRP6a) requires the firmware's `sec2` username and PoP; pass
+  `security: EspSecurityScheme.security2` and `username` alongside the PoP.
+
+A wrong PoP surfaces as `E_PROV_SESSION`
+(`EspProvisioningFailure.sessionFailed`) on Android; on iOS it fails during
+connect. Security 0 (unauthenticated) firmware is not supported.
 
 ## Requirements
 

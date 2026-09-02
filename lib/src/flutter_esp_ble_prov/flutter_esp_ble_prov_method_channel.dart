@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:esp_provisioning_wifi/esp_provisioning_error_codes.dart';
+import 'package:esp_provisioning_wifi/esp_security_scheme.dart';
 import 'package:esp_provisioning_wifi/esp_wifi_network.dart';
 
 import 'flutter_esp_ble_prov_method_names.dart';
@@ -37,11 +38,15 @@ class MethodChannelFlutterEspBleProv extends FlutterEspBleProvPlatform {
   Future<List<EspWifiNetwork>> scanWifiNetworks(
     String deviceName,
     String proofOfPossession, {
+    EspSecurityScheme security = EspSecurityScheme.security1,
+    String? username,
     Duration? connectTimeout,
   }) async {
     final args = {
       'deviceName': deviceName,
       'proofOfPossession': proofOfPossession,
+      FlutterEspBleProvMethodNames.securityArg: security.channelValue,
+      if (username != null) FlutterEspBleProvMethodNames.usernameArg: username,
       if (connectTimeout != null)
         FlutterEspBleProvMethodNames.connectTimeoutMsArg:
             connectTimeout.inMilliseconds,
@@ -62,6 +67,8 @@ class MethodChannelFlutterEspBleProv extends FlutterEspBleProvPlatform {
     String proofOfPossession,
     String ssid,
     String passphrase, {
+    EspSecurityScheme security = EspSecurityScheme.security1,
+    String? username,
     Duration? connectTimeout,
   }) async {
     final args = {
@@ -69,6 +76,8 @@ class MethodChannelFlutterEspBleProv extends FlutterEspBleProvPlatform {
       'proofOfPossession': proofOfPossession,
       'ssid': ssid,
       'passphrase': passphrase,
+      FlutterEspBleProvMethodNames.securityArg: security.channelValue,
+      if (username != null) FlutterEspBleProvMethodNames.usernameArg: username,
       if (connectTimeout != null)
         FlutterEspBleProvMethodNames.connectTimeoutMsArg:
             connectTimeout.inMilliseconds,
@@ -94,6 +103,8 @@ class MethodChannelFlutterEspBleProv extends FlutterEspBleProvPlatform {
     String proofOfPossession, {
     String endpoint = 'custom-data',
     String payload = '',
+    EspSecurityScheme security = EspSecurityScheme.security1,
+    String? username,
     Duration? connectTimeout,
   }) {
     final args = {
@@ -101,6 +112,8 @@ class MethodChannelFlutterEspBleProv extends FlutterEspBleProvPlatform {
       'proofOfPossession': proofOfPossession,
       FlutterEspBleProvMethodNames.endpointArg: endpoint,
       FlutterEspBleProvMethodNames.payloadArg: payload,
+      FlutterEspBleProvMethodNames.securityArg: security.channelValue,
+      if (username != null) FlutterEspBleProvMethodNames.usernameArg: username,
       if (connectTimeout != null)
         FlutterEspBleProvMethodNames.connectTimeoutMsArg:
             connectTimeout.inMilliseconds,

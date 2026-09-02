@@ -56,8 +56,10 @@ Use it to make safe, consistent changes quickly.
   for that job before considering the change verified.
 - End-to-end verification uses `example/` on a PHYSICAL device (`flutter run`
   from `example/`; emulators/simulators lack usable BLE) against an ESP32
-  running Espressif BLE provisioning firmware with Security 1. The example
-  pre-fills the Espressif demo defaults (`PROV_` prefix, `abcd1234` PoP).
+  running Espressif BLE provisioning firmware with Security 1 (the example's
+  default; Security 2 needs the firmware's SRP6a username passed through the
+  API). The example pre-fills the Espressif demo defaults (`PROV_` prefix,
+  `abcd1234` PoP).
   The on-device channel smoke test is `flutter test integration_test` from
   `example/`; CI does not run it.
 

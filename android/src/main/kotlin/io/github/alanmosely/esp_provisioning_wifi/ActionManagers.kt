@@ -12,8 +12,34 @@ import com.espressif.provisioning.listeners.ResponseListener
 import com.espressif.provisioning.listeners.WiFiScanListener
 import java.nio.charset.StandardCharsets
 
+/**
+ * The provisioning security scheme selected for an operation.
+ */
+data class SecurityArgs(val security: Int, val username: String?)
+
 abstract class ActionManager(protected val boss: Boss) {
   abstract fun call(ctx: CallContext)
+
+  /**
+   * Parses the security arguments; resolves E0 and returns null when
+   * Security 2 is requested without the SRP6a username it requires.
+   *
+   * Call BEFORE [startResolver] so an invalid call fails fast without
+   * superseding an in-flight operation (matching iOS and how missing string
+   * arguments are handled).
+   */
+  protected fun securityArgs(ctx: CallContext): SecurityArgs? {
+    val security = ctx.security()
+    val username = ctx.optionalString(ArgumentNames.USERNAME)
+    if (security == 2 && username.isNullOrEmpty()) {
+      ctx.result.error(
+          ErrorCodes.MISSING_ARGUMENT,
+          "Missing argument: username",
+          "Security 2 requires the SRP6a username configured in the firmware")
+      return null
+    }
+    return SecurityArgs(security, username)
+  }
 
   /**
    * Starts a fresh operation (cancelling any in-flight one) and returns its
@@ -86,6 +112,7 @@ class WifiScanManager(boss: Boss) : ActionManager(boss) {
     val name = ctx.arg("deviceName") ?: return
     val proofOfPossession = ctx.arg("proofOfPossession") ?: return
     val connectTimeoutMs = ctx.connectTimeoutMs()
+    val securityArgs = securityArgs(ctx) ?: return
     val resolver = startResolver(ctx)
     val conn = boss.connector(name)
     if (conn == null) {
@@ -101,6 +128,8 @@ class WifiScanManager(boss: Boss) : ActionManager(boss) {
     boss.connect(
         conn,
         proofOfPossession,
+        securityArgs.security,
+        securityArgs.username,
         resolver.operationToken,
         connectTimeoutMs,
         { esp ->
@@ -155,6 +184,7 @@ class CustomDataManager(boss: Boss) : ActionManager(boss) {
     val endpoint = ctx.arg(ArgumentNames.ENDPOINT) ?: return
     val payload = ctx.optionalString(ArgumentNames.PAYLOAD) ?: ""
     val connectTimeoutMs = ctx.connectTimeoutMs()
+    val securityArgs = securityArgs(ctx) ?: return
     val resolver = startResolver(ctx)
     val conn = boss.connector(name)
     if (conn == null) {
@@ -168,6 +198,8 @@ class CustomDataManager(boss: Boss) : ActionManager(boss) {
     boss.connect(
         conn,
         proofOfPossession,
+        securityArgs.security,
+        securityArgs.username,
         resolver.operationToken,
         connectTimeoutMs,
         { esp ->
@@ -216,6 +248,7 @@ class WifiProvisionManager(boss: Boss) : ActionManager(boss) {
     val deviceName = ctx.arg("deviceName") ?: return
     val proofOfPossession = ctx.arg("proofOfPossession") ?: return
     val connectTimeoutMs = ctx.connectTimeoutMs()
+    val securityArgs = securityArgs(ctx) ?: return
     val resolver = startResolver(ctx)
     val conn = boss.connector(deviceName)
     if (conn == null) {
@@ -229,6 +262,8 @@ class WifiProvisionManager(boss: Boss) : ActionManager(boss) {
     boss.connect(
         conn,
         proofOfPossession,
+        securityArgs.security,
+        securityArgs.username,
         resolver.operationToken,
         connectTimeoutMs,
         { esp ->

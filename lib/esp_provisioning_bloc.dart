@@ -142,6 +142,8 @@ class EspProvisioningBloc
         () => espProvisioningService.scanWifiNetworks(
           event.bluetoothDevice,
           event.proofOfPossession,
+          security: event.security,
+          username: event.username,
           connectTimeout: _connectTimeout,
         ),
         const <EspWifiNetwork>[],
@@ -183,6 +185,8 @@ class EspProvisioningBloc
           event.proofOfPossession,
           event.wifiNetwork,
           event.password,
+          security: event.security,
+          username: event.username,
           connectTimeout: _connectTimeout,
         ),
         false,

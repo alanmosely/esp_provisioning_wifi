@@ -1,3 +1,4 @@
+import 'package:esp_provisioning_wifi/esp_security_scheme.dart';
 import 'package:esp_provisioning_wifi/esp_wifi_network.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 
@@ -35,6 +36,8 @@ abstract class FlutterEspBleProvPlatform extends PlatformInterface {
   Future<List<EspWifiNetwork>> scanWifiNetworks(
     String deviceName,
     String proofOfPossession, {
+    EspSecurityScheme security = EspSecurityScheme.security1,
+    String? username,
     Duration? connectTimeout,
   }) {
     throw UnimplementedError('scanWifiNetworks has not been implemented.');
@@ -45,6 +48,8 @@ abstract class FlutterEspBleProvPlatform extends PlatformInterface {
     String proofOfPossession,
     String ssid,
     String passphrase, {
+    EspSecurityScheme security = EspSecurityScheme.security1,
+    String? username,
     Duration? connectTimeout,
   }) {
     throw UnimplementedError('provisionWifi has not been implemented');
@@ -59,6 +64,8 @@ abstract class FlutterEspBleProvPlatform extends PlatformInterface {
     String proofOfPossession, {
     String endpoint = 'custom-data',
     String payload = '',
+    EspSecurityScheme security = EspSecurityScheme.security1,
+    String? username,
     Duration? connectTimeout,
   }) {
     throw UnimplementedError('fetchCustomData has not been implemented');
