@@ -21,7 +21,7 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      - run: dart format --output=none --set-exit-if-changed lib test
+      - run: dart format --output=none --set-exit-if-changed lib test example/lib example/test example/integration_test
       - run: flutter analyze
       - run: flutter test
       - run: flutter test
@@ -46,7 +46,7 @@ jobs:
       # Native unit tests for the plugin's Kotlin invariants (resolver
       # exactly-once/main-thread, Boss token/cancel/credit semantics). The
       # gradle wrapper only exists after the Flutter build above generates it.
-      - run: ./gradlew :esp_provisioning_wifi:testDebugUnitTest
+      - run: ./gradlew :esp_provisioning_wifi:testDebugUnitTest :esp_provisioning_wifi:lintDebug
         working-directory: example/android
 
   # The only place the Swift plugin is compiled; non-Mac dev machines cannot.
@@ -59,5 +59,6 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
+      - run: swift test --package-path ios
       - run: flutter build ios --debug --no-codesign
         working-directory: example

@@ -8,6 +8,8 @@ object MethodNames {
   const val PROVISION_WIFI = "provisionWifi"
   const val FETCH_CUSTOM_DATA = "fetchCustomData"
   const val CANCEL_OPERATIONS = "cancelOperations"
+  const val ENSURE_BLUETOOTH_READY = "ensureBluetoothReady"
+  const val CANCEL_BLUETOOTH_READINESS = "cancelBluetoothReadiness"
 }
 
 object ArgumentNames {

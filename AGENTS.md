@@ -58,6 +58,10 @@ Use it to make safe, consistent changes quickly.
   `flutter build ios --debug --no-codesign` in `example/`) compiles the Swift
   plugin — non-Mac dev machines cannot. After any Swift edit, push and wait
   for that job before considering the change verified.
+- Swift lifecycle/parser tests: `swift test --package-path ios` (macOS CI).
+  These test production Foundation logic with injected adapter/timer callbacks;
+  the iOS example build still compiles the Core Bluetooth/Flutter adapter.
+- Android lint: `gradlew :esp_provisioning_wifi:lintDebug` from `example/android`.
 - End-to-end verification uses `example/` on a PHYSICAL device (`flutter run`
   from `example/`; emulators/simulators lack usable BLE) against an ESP32
   running Espressif BLE provisioning firmware with Security 1 (the example's
@@ -69,11 +73,12 @@ Use it to make safe, consistent changes quickly.
 
 ## CI
 - `.github/workflows/ci.yml` gates every push to master and every PR:
-  `dart format --set-exit-if-changed lib test`, `flutter analyze`,
+  `dart format --set-exit-if-changed lib test example/lib example/test example/integration_test`, `flutter analyze`,
   `flutter test` (root AND `example/`), `flutter pub publish --dry-run`,
   `flutter build apk --debug` in `example/` on JDK 17 (Kotlin compile check)
   followed by the plugin's native unit tests
-  (`./gradlew :esp_provisioning_wifi:testDebugUnitTest` in `example/android`),
+  (`./gradlew :esp_provisioning_wifi:testDebugUnitTest :esp_provisioning_wifi:lintDebug` in `example/android`),
+  `swift test --package-path ios` on macOS,
   and `flutter build ios --debug --no-codesign` in `example/` on macOS (the
   only Swift compile check). Replicate what you can locally before pushing.
 

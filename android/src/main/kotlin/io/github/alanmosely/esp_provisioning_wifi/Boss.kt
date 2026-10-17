@@ -37,6 +37,7 @@ class Boss {
 
   // Managers performing the various actions.
   private val permissionManager = PermissionManager(this)
+  internal fun ensurePermissions(callback: (Boolean) -> Unit) = permissionManager.ensure(callback)
   private val bleScanner = BleScanManager(this)
   private val wifiScanner = WifiScanManager(this)
   private val wifiProvisioner = WifiProvisionManager(this)
@@ -158,6 +159,8 @@ class Boss {
     bleScanInFlight = false
     try {
       espManager.stopBleScan()
+    } catch (denied: SecurityException) {
+      e("stopBleScan permission revoked: $denied")
     } catch (e: Exception) {
       e("stopBleScan failed: $e")
     }

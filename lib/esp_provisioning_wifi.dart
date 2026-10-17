@@ -1,4 +1,5 @@
 export 'esp_provisioning_bloc.dart';
+export 'esp_bluetooth.dart';
 export 'esp_provisioning_constants.dart';
 export 'esp_provisioning_error_codes.dart';
 export 'esp_provisioning_event.dart';

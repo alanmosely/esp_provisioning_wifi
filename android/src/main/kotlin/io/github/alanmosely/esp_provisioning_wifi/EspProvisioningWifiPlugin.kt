@@ -21,22 +21,64 @@ class EspProvisioningWifiPlugin :
   private val boss = Boss()
   private lateinit var channel: MethodChannel
   private var activityBinding: ActivityPluginBinding? = null
+  private var bluetooth: BluetoothReadiness? = null
 
   override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
     Log.d(logTag, "onAttachedToEngine: $binding")
     channel = MethodChannel(binding.binaryMessenger, MethodNames.CHANNEL)
     channel.setMethodCallHandler(this)
     boss.attachContext(binding.applicationContext)
+    bluetooth = BluetoothReadiness(binding.applicationContext, boss, boss::ensurePermissions)
   }
 
   override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
     Log.d(logTag, "onDetachedFromEngine: $binding")
     channel.setMethodCallHandler(null)
+    bluetooth?.cancel()
+    bluetooth = null
     boss.cancelOperations()
   }
 
   override fun onMethodCall(call: MethodCall, result: Result) {
     Log.d(logTag, "onMethodCall: ${call.method}")
+    if (call.method == MethodNames.CANCEL_BLUETOOTH_READINESS) {
+      val arguments = call.arguments as? Map<*, *>
+      val rawId = arguments?.get("requestId")
+      val id = ChannelArguments.integer(rawId)
+      if (arguments == null || !arguments.containsKey("requestId") ||
+          (rawId != null && (id == null || id <= 0))) {
+        result.error(ErrorCodes.MISSING_ARGUMENT, "Invalid Bluetooth cancellation arguments", null)
+        return
+      }
+      bluetooth?.cancel(id)
+      result.success(null)
+      return
+    }
+    if (call.method == MethodNames.ENSURE_BLUETOOTH_READY) {
+      val arguments = call.arguments as? Map<*, *>
+      val id = ChannelArguments.integer(arguments?.get("requestId"))
+      val timeout = ChannelArguments.integer(arguments?.get("timeoutMs"))
+      val requestEnable = arguments?.get("requestEnable") as? Boolean
+      if (id == null || id <= 0 || timeout == null || timeout !in 1L..120000L || requestEnable == null) {
+        result.error(ErrorCodes.MISSING_ARGUMENT, "Invalid Bluetooth readiness arguments", null)
+      } else {
+        bluetooth?.ensureReady(id, requestEnable, timeout, result)
+            ?: result.error("E_NO_ENGINE", "Bluetooth plugin is detached", null)
+      }
+      return
+    }
+    if (call.method != MethodNames.GET_PLATFORM_VERSION && call.method != MethodNames.CANCEL_OPERATIONS) {
+      val required = ChannelArguments.requiredStrings(call.method)
+      if (required == null) {
+        result.notImplemented()
+        return
+      }
+      if (!ChannelArguments.validOperation(call.arguments, required)) {
+        result.error(ErrorCodes.MISSING_ARGUMENT, "Invalid provisioning arguments", null)
+        return
+      }
+    }
+    if (call.method != MethodNames.GET_PLATFORM_VERSION) bluetooth?.cancel()
     boss.call(call, result)
   }
 
@@ -62,7 +104,7 @@ class EspProvisioningWifiPlugin :
 
   override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?): Boolean {
     Log.d(logTag, "onActivityResult $requestCode $resultCode $data")
-    return false
+    return bluetooth?.onActivityResult(requestCode, resultCode) ?: false
   }
 
   private fun init(binding: ActivityPluginBinding) {
@@ -70,9 +112,11 @@ class EspProvisioningWifiPlugin :
     binding.addActivityResultListener(this)
     boss.attachBinding(binding)
     boss.attachActivity(binding.activity)
+    bluetooth?.attach(binding.activity)
   }
 
   private fun tearDown(binding: ActivityPluginBinding, permanent: Boolean) {
+    bluetooth?.detach(permanent)
     binding.removeActivityResultListener(this)
     boss.detachBinding(binding)
     boss.detachActivity(permanent)
