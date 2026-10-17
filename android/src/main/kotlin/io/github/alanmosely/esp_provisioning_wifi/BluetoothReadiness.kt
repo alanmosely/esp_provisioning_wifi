@@ -1,12 +1,15 @@
 package io.github.alanmosely.esp_provisioning_wifi
 
 import android.app.Activity
+import android.Manifest
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import androidx.core.content.ContextCompat
@@ -21,6 +24,11 @@ internal class BluetoothReadiness(
       (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter?.state
     },
     private val launchEnable: (Activity, Int) -> Unit = { activity, code ->
+      // Recheck immediately before the system prompt: permissions are revocable.
+      if (Build.VERSION.SDK_INT >= 31 && ContextCompat.checkSelfPermission(
+          activity, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+        throw SecurityException("Bluetooth connect permission is required")
+      }
       activity.startActivityForResult(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE), code)
     }
 ) {

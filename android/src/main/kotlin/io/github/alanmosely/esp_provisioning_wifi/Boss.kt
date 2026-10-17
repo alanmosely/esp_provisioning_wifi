@@ -159,6 +159,8 @@ class Boss {
     bleScanInFlight = false
     try {
       espManager.stopBleScan()
+    } catch (denied: SecurityException) {
+      e("stopBleScan permission revoked: $denied")
     } catch (e: Exception) {
       e("stopBleScan failed: $e")
     }
