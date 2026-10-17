@@ -1,6 +1,7 @@
 package io.github.alanmosely.esp_provisioning_wifi
 
 import android.app.Activity
+import android.Manifest
 import android.bluetooth.BluetoothAdapter
 import android.content.Intent
 import android.os.Looper
@@ -159,6 +160,17 @@ class BluetoothReadinessTest {
   @Test fun platformEnableFailureIsReported() {
     readiness = BluetoothReadiness(context, Boss(), { it(true) }, { state },
         { _, _ -> throw IllegalStateException("cannot launch") })
+    readiness.attach(Robolectric.buildActivity(Activity::class.java).setup().get())
+    readiness.ensureReady(1, true, 1000, result)
+    assertEquals("E_BLUETOOTH_ENABLE", result.errors.single().first)
+    shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(2))
+    assertEquals(1, result.resolutionCount)
+  }
+
+  @Test fun revokedPermissionBeforeSystemPromptFailsExactlyOnce() {
+    shadowOf(context).denyPermissions(Manifest.permission.BLUETOOTH_CONNECT,
+        Manifest.permission.BLUETOOTH_ADMIN)
+    readiness = BluetoothReadiness(context, Boss(), { it(true) }, { state })
     readiness.attach(Robolectric.buildActivity(Activity::class.java).setup().get())
     readiness.ensureReady(1, true, 1000, result)
     assertEquals("E_BLUETOOTH_ENABLE", result.errors.single().first)

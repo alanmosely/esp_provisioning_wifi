@@ -29,7 +29,16 @@ internal class BluetoothReadiness(
           activity, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
         throw SecurityException("Bluetooth connect permission is required")
       }
-      activity.startActivityForResult(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE), code)
+      if (Build.VERSION.SDK_INT < 31 && ContextCompat.checkSelfPermission(
+          activity, Manifest.permission.BLUETOOTH_ADMIN) != PackageManager.PERMISSION_GRANTED) {
+        throw SecurityException("Bluetooth admin permission is required")
+      }
+      try {
+        activity.startActivityForResult(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE), code)
+      } catch (denied: SecurityException) {
+        // Revocation can race the checks; the caller resolves E_BLUETOOTH_ENABLE.
+        throw IllegalStateException("Bluetooth permission revoked before enable", denied)
+      }
     }
 ) {
   private val handler = Handler(Looper.getMainLooper())
