@@ -38,6 +38,20 @@ supersedes active provisioning, and starting provisioning cancels readiness.
 setup screen. Activity configuration changes retain Android's pending request;
 permanent detach cancels it. No radio scan or connection is started by readiness.
 
+Invalid channel arguments return `E0` before changing active work; unknown
+methods return not-implemented without cancellation. Raw channel callers must
+send a cancellation map containing `requestId`: an explicit null cancels the
+current readiness request, while a positive integer targets only that request.
+The public Dart API supplies these arguments automatically.
+
+The example's Bluetooth button checks readiness before scanning, provides
+Settings guidance for disabled/denied Bluetooth, and permits cancellation and
+retry. Its integration smoke test exercises the native readiness channel on a
+selected physical phone. Host widget tests cover those UI transitions. Android
+Robolectric tests and lint run in CI; `swift test --package-path ios` exercises
+the production iOS lifecycle and argument parser with an injected adapter and
+clock. These host tests do not qualify real permission dialogs or BLE hardware.
+
 This is an additive API. Existing provisioning methods and OS minimums are
 unchanged. Applications replacing another Bluetooth adapter helper should map
 these states to their existing guidance and retain native permission/denial,

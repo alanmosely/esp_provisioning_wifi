@@ -43,22 +43,40 @@ class EspProvisioningWifiPlugin :
     Log.d(logTag, "onMethodCall: ${call.method}")
     if (call.method == MethodNames.CANCEL_BLUETOOTH_READINESS) {
       val arguments = call.arguments as? Map<*, *>
-      bluetooth?.cancel((arguments?.get("requestId") as? Number)?.toInt())
+      val rawId = arguments?.get("requestId")
+      val id = ChannelArguments.integer(rawId)
+      if (arguments == null || !arguments.containsKey("requestId") ||
+          (rawId != null && (id == null || id <= 0))) {
+        result.error(ErrorCodes.MISSING_ARGUMENT, "Invalid Bluetooth cancellation arguments", null)
+        return
+      }
+      bluetooth?.cancel(id)
       result.success(null)
       return
     }
     if (call.method == MethodNames.ENSURE_BLUETOOTH_READY) {
       val arguments = call.arguments as? Map<*, *>
-      val id = (arguments?.get("requestId") as? Number)?.toInt()
-      val timeout = (arguments?.get("timeoutMs") as? Number)?.toLong()
+      val id = ChannelArguments.integer(arguments?.get("requestId"))
+      val timeout = ChannelArguments.integer(arguments?.get("timeoutMs"))
       val requestEnable = arguments?.get("requestEnable") as? Boolean
-      if (id == null || timeout == null || timeout !in 1L..120000L || requestEnable == null) {
+      if (id == null || id <= 0 || timeout == null || timeout !in 1L..120000L || requestEnable == null) {
         result.error(ErrorCodes.MISSING_ARGUMENT, "Invalid Bluetooth readiness arguments", null)
       } else {
         bluetooth?.ensureReady(id, requestEnable, timeout, result)
             ?: result.error("E_NO_ENGINE", "Bluetooth plugin is detached", null)
       }
       return
+    }
+    if (call.method != MethodNames.GET_PLATFORM_VERSION && call.method != MethodNames.CANCEL_OPERATIONS) {
+      val required = ChannelArguments.requiredStrings(call.method)
+      if (required == null) {
+        result.notImplemented()
+        return
+      }
+      if (!ChannelArguments.validOperation(call.arguments, required)) {
+        result.error(ErrorCodes.MISSING_ARGUMENT, "Invalid provisioning arguments", null)
+        return
+      }
     }
     if (call.method != MethodNames.GET_PLATFORM_VERSION) bluetooth?.cancel()
     boss.call(call, result)

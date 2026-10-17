@@ -17,7 +17,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [30, 33])
+@Config(sdk = [23, 30, 31, 33])
 class BluetoothReadinessTest {
   private val context get() = RuntimeEnvironment.getApplication()
   private var state: Int? = BluetoothAdapter.STATE_OFF

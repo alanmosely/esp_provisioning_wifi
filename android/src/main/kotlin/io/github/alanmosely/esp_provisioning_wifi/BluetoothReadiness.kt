@@ -46,7 +46,7 @@ internal class BluetoothReadiness(
   private var pending: Attempt? = null
   private var nextCode = 8100
 
-  private class Attempt(val id: Int, val resolver: OperationResolver, val code: Int) {
+  private class Attempt(val id: Long, val resolver: OperationResolver, val code: Int) {
     var receiver: BroadcastReceiver? = null
     var timeout: Runnable? = null
   }
@@ -58,14 +58,14 @@ internal class BluetoothReadiness(
     if (permanent) cancel()
   }
 
-  fun cancel(requestId: Int? = null) {
+  fun cancel(requestId: Long? = null) {
     val attempt = pending ?: return
     if (requestId != null && requestId != attempt.id) return
     cleanup(attempt)
     attempt.resolver.cancelled()
   }
 
-  fun ensureReady(id: Int, requestEnable: Boolean, timeoutMs: Long, result: Result) {
+  fun ensureReady(id: Long, requestEnable: Boolean, timeoutMs: Long, result: Result) {
     cancel()
     val resolver = OperationResolver(boss, boss.startOperation(), result)
     boss.trackResolver(resolver)

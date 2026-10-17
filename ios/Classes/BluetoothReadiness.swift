@@ -2,54 +2,50 @@ import CoreBluetooth
 import Flutter
 
 /// All state and Flutter replies are confined to the platform main queue.
-final class BluetoothReadiness: NSObject, CBCentralManagerDelegate {
-    private var manager: CBCentralManager?
-    private var pending: FlutterResult?
-    private var requestId: Int?
-    private var timeout: DispatchWorkItem?
+final class BluetoothReadiness {
+    private let session = BluetoothReadinessSession(makeAdapter: { CoreBluetoothReadinessAdapter() })
 
     func ensureReady(id: Int, timeoutMs: Int, result: @escaping FlutterResult) {
-        cancel()
-        requestId = id
-        pending = result
-        let deadline = DispatchWorkItem { [weak self] in
-            guard let self = self, self.requestId == id else { return }
-            self.finish(FlutterError(code: "E_BLUETOOTH_TIMEOUT",
-                message: "Bluetooth readiness timed out", details: nil))
+        session.ensureReady(id: id, timeoutMs: timeoutMs) { outcome in
+            switch outcome {
+            case .state(let state): result(state)
+            case .cancelled:
+                result(FlutterError(code: "E_CANCELLED", message: "Operation cancelled", details: nil))
+            case .timedOut:
+                result(FlutterError(code: "E_BLUETOOTH_TIMEOUT", message: "Bluetooth readiness timed out", details: nil))
+            }
         }
-        timeout = deadline
-        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(timeoutMs), execute: deadline)
-        // Core Bluetooth owns authorization. iOS does not expose a radio-enable API.
-        // The app provides its existing guidance when the radio is powered off.
+    }
+
+    func cancel(id: Int? = nil) { session.cancel(id: id) }
+}
+
+private final class CoreBluetoothReadinessAdapter: NSObject, ReadinessAdapter, CBCentralManagerDelegate {
+    private var manager: CBCentralManager?
+    private var changed: ((ReadinessState) -> Void)?
+
+    func start(_ changed: @escaping (ReadinessState) -> Void) {
+        self.changed = changed
+        // Core Bluetooth owns authorization. iOS has no radio-enable API.
         manager = CBCentralManager(delegate: self, queue: .main,
             options: [CBCentralManagerOptionShowPowerAlertKey: false])
     }
 
-    func cancel(id: Int? = nil) {
-        guard pending != nil, id == nil || id == requestId else { return }
-        finish(FlutterError(code: "E_CANCELLED", message: "Operation cancelled", details: nil))
+    func stop() {
+        changed = nil
+        manager?.delegate = nil
+        manager = nil
     }
 
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
-        guard central === manager, pending != nil else { return }
+        guard central === manager else { return }
         switch central.state {
-        case .poweredOn: finish("on")
-        case .poweredOff: finish("off")
-        case .unauthorized: finish("unauthorized")
-        case .unsupported: finish("unavailable")
-        case .unknown, .resetting: break // Wait within the original deadline.
-        @unknown default: finish("unknown")
+        case .poweredOn: changed?(.on)
+        case .poweredOff: changed?(.off)
+        case .unauthorized: changed?(.unauthorized)
+        case .unsupported: changed?(.unavailable)
+        case .unknown, .resetting: changed?(.waiting)
+        @unknown default: changed?(.unknown)
         }
-    }
-
-    private func finish(_ value: Any?) {
-        guard let result = pending else { return }
-        pending = nil
-        requestId = nil
-        timeout?.cancel()
-        timeout = nil
-        manager?.delegate = nil
-        manager = nil
-        result(value)
     }
 }

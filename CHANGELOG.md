@@ -1,5 +1,8 @@
 ## 0.4.0
 
+* Alpha: Reject malformed cancellation/provisioning requests before superseding active work on both platforms; unknown methods preserve pending readiness. Preserve full-width request IDs.
+* Alpha: Add Android dispatch/permission regressions across API 23/30/31/33, Swift lifecycle/parser tests, CI Android lint, and example readiness/cancel/retry coverage.
+
 * Alpha: Add EspBluetooth.ensureReady and EspBluetoothState using native Android BluetoothAdapter and iOS Core Bluetooth; no additional Bluetooth dependency.
 * Alpha: Bound permission/enable waits, cancel on teardown or supersession, and isolate late readiness callbacks from successor requests.
 * Alpha: Existing provisioning APIs and platform minimums are unchanged. Readiness participates in the single-operation model and supersedes an active provisioning operation; cancel() cancels readiness only.

@@ -13,4 +13,18 @@ void main() {
     final cancelled = await service.cancelOperations();
     expect(cancelled, isTrue);
   });
+
+  testWidgets('native Bluetooth readiness and cancellation are registered',
+      (_) async {
+    try {
+      final state = await EspBluetooth.ensureReady(
+        requestEnable: false,
+        timeout: const Duration(seconds: 60),
+      );
+      expect(EspBluetoothState.values, contains(state));
+      await EspBluetooth.cancel();
+    } finally {
+      await service.cancelOperations();
+    }
+  });
 }

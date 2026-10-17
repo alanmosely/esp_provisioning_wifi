@@ -142,36 +142,31 @@ public class SwiftEspProvisioningWifiPlugin: NSObject, FlutterPlugin {
     
 
     public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
-        if call.method == MethodNames.cancelBluetoothReadiness {
-            let arguments = call.arguments as? [String: Any]
-            bluetooth.cancel(id: arguments?["requestId"] as? Int)
+        switch BluetoothChannelRequest.parse(call.method, call.arguments) {
+        case .cancelReadiness(let id):
+            bluetooth.cancel(id: id)
             result(nil)
             return
-        }
-        if call.method == MethodNames.ensureBluetoothReady {
-            guard let arguments = call.arguments as? [String: Any],
-                  let id = arguments["requestId"] as? Int,
-                  let timeoutMs = arguments["timeoutMs"] as? Int,
-                  (1...120000).contains(timeoutMs),
-                  arguments["requestEnable"] is Bool else {
-                result(FlutterError(code: ErrorCodes.missingArgument,
-                    message: "Invalid Bluetooth readiness arguments", details: nil))
-                return
-            }
+        case .ensureReady(let id, let timeoutMs):
             _ = coordinator.cancelOperations()
             bluetooth.ensureReady(id: id, timeoutMs: timeoutMs, result: result)
             return
-        }
-        if call.method == MethodNames.getPlatformVersion {
+        case .platformVersion:
             result("iOS " + UIDevice.current.systemVersion)
             return
-        }
-
-        bluetooth.cancel()
-
-        if call.method == MethodNames.cancelOperations {
+        case .cancelOperations:
+            bluetooth.cancel()
             result(coordinator.cancelOperations())
             return
+        case .invalid:
+            result(FlutterError(code: ErrorCodes.missingArgument,
+                message: "Invalid method arguments", details: nil))
+            return
+        case .unsupported:
+            result(FlutterMethodNotImplemented)
+            return
+        case .provisioning:
+            bluetooth.cancel()
         }
 
         guard let arguments = call.arguments as? [String: Any] else {
