@@ -9,6 +9,8 @@ class FlutterEspBleProvMethodNames {
   static const String provisionWifi = 'provisionWifi';
   static const String fetchCustomData = 'fetchCustomData';
   static const String cancelOperations = 'cancelOperations';
+  static const String ensureBluetoothReady = 'ensureBluetoothReady';
+  static const String cancelBluetoothReadiness = 'cancelBluetoothReadiness';
 
   static const String connectTimeoutMsArg = 'connectTimeoutMs';
   static const String deviceNameArg = 'deviceName';

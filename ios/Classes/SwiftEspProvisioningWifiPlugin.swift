@@ -27,6 +27,8 @@ private enum MethodNames {
     static let provisionWifi = "provisionWifi"
     static let fetchCustomData = "fetchCustomData"
     static let cancelOperations = "cancelOperations"
+    static let ensureBluetoothReady = "ensureBluetoothReady"
+    static let cancelBluetoothReadiness = "cancelBluetoothReadiness"
 }
 
 private enum ArgumentKeys {
@@ -125,6 +127,12 @@ private final class ProvisionOperationCoordinator {
 
 public class SwiftEspProvisioningWifiPlugin: NSObject, FlutterPlugin {
     private let coordinator = ProvisionOperationCoordinator()
+    private let bluetooth = BluetoothReadiness()
+
+    public func detachFromEngine(for registrar: FlutterPluginRegistrar) {
+        bluetooth.cancel()
+        _ = coordinator.cancelOperations()
+    }
 
     public static func register(with registrar: FlutterPluginRegistrar) {
         let channel = FlutterMethodChannel(name: MethodNames.channel, binaryMessenger: registrar.messenger())
@@ -134,10 +142,32 @@ public class SwiftEspProvisioningWifiPlugin: NSObject, FlutterPlugin {
     
 
     public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        if call.method == MethodNames.cancelBluetoothReadiness {
+            let arguments = call.arguments as? [String: Any]
+            bluetooth.cancel(id: arguments?["requestId"] as? Int)
+            result(nil)
+            return
+        }
+        if call.method == MethodNames.ensureBluetoothReady {
+            guard let arguments = call.arguments as? [String: Any],
+                  let id = arguments["requestId"] as? Int,
+                  let timeoutMs = arguments["timeoutMs"] as? Int,
+                  (1...120000).contains(timeoutMs),
+                  arguments["requestEnable"] is Bool else {
+                result(FlutterError(code: ErrorCodes.missingArgument,
+                    message: "Invalid Bluetooth readiness arguments", details: nil))
+                return
+            }
+            _ = coordinator.cancelOperations()
+            bluetooth.ensureReady(id: id, timeoutMs: timeoutMs, result: result)
+            return
+        }
         if call.method == MethodNames.getPlatformVersion {
             result("iOS " + UIDevice.current.systemVersion)
             return
         }
+
+        bluetooth.cancel()
 
         if call.method == MethodNames.cancelOperations {
             result(coordinator.cancelOperations())

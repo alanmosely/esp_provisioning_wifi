@@ -10,6 +10,41 @@ Library to provision WiFi on ESP32 devices over Bluetooth, using Bloc.
 
 ## API Notes
 
+### Bluetooth readiness (0.4.0)
+
+`EspBluetooth.ensureReady()` uses Android BluetoothAdapter and iOS Core Bluetooth,
+without an additional Bluetooth plugin. Import it through the public barrel.
+
+```dart
+final state = await EspBluetooth.ensureReady();
+if (state == EspBluetoothState.on) {
+  // Begin the normal provisioning scan.
+}
+```
+
+Results are `on`, `off`, `unauthorized`, `unavailable`, or `unknown`. Android
+requests the existing provisioning permissions, then presents the system enable
+dialog if needed. `requestEnable: false` suppresses that enable dialog (permission
+requests still apply). iOS requests Core Bluetooth authorization as needed and
+reports a disabled radio; it cannot switch Bluetooth on. Retain the consuming
+app's `NSBluetoothAlwaysUsageDescription` and permission recovery UI.
+
+The default total deadline is 60 seconds, configurable from 1 ms to 2 minutes.
+It includes time spent in system dialogs. A timeout reports
+`E_BLUETOOTH_TIMEOUT`; cancellation/supersession reports `E_CANCELLED`.
+Readiness participates in the plugin's single-operation model: starting it
+supersedes active provisioning, and starting provisioning cancels readiness.
+`EspBluetooth.cancel()` cancels readiness only; call it when leaving a pending
+setup screen. Activity configuration changes retain Android's pending request;
+permanent detach cancels it. No radio scan or connection is started by readiness.
+
+This is an additive API. Existing provisioning methods and OS minimums are
+unchanged. Applications replacing another Bluetooth adapter helper should map
+these states to their existing guidance and retain native permission/denial,
+timeout, retry and foreground/background tests.
+
+### Provisioning
+
 - Import the package via the public barrel:
   - `import 'package:esp_provisioning_wifi/esp_provisioning_wifi.dart';`
 - Most apps drive the flow through `EspProvisioningBloc` (see Usage). For
