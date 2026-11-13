@@ -1,5 +1,6 @@
 ## 0.4.0
 
+* Alpha: Ignore late Bluetooth permission results after the provisioning BLoC closes or a newer operation starts.
 * Alpha: Reject malformed cancellation/provisioning requests before superseding active work on both platforms; unknown methods preserve pending readiness. Preserve full-width request IDs.
 * Alpha: Add Android dispatch/permission regressions across API 23/30/31/33, Swift lifecycle/parser tests, CI Android lint, and example readiness/cancel/retry coverage.
 
