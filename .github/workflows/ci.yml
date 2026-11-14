@@ -28,6 +28,24 @@ jobs:
         working-directory: example
       - run: flutter pub publish --dry-run
 
+  minimum-flutter-consumer:
+    name: Flutter 3.24 consumer
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .github/fixtures/flutter_3_24_consumer
+    steps:
+      - uses: actions/checkout@v5
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.24.0"
+          channel: stable
+          cache: true
+      # Resolve the plugin as a dependency so only the consumer needs to
+      # support Flutter 3.24, independently of the plugin's contributor tools.
+      - run: flutter pub get
+      - run: flutter test --no-pub
+
   build-android-example:
     runs-on: ubuntu-latest
     steps:

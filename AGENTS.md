@@ -81,6 +81,9 @@ Use it to make safe, consistent changes quickly.
   `swift test --package-path ios` on macOS,
   and `flutter build ios --debug --no-codesign` in `example/` on macOS (the
   only Swift compile check). Replicate what you can locally before pushing.
+- The Flutter 3.24 consumer job resolves the plugin as a path dependency and
+  tests its public import. With Flutter 3.24.0, run `flutter pub get` and
+  `flutter test --no-pub` from `.github/fixtures/flutter_3_24_consumer`.
 
 ## Preferred Tooling (Use Dart MCP First)
 When available, prefer Dart MCP tools over raw shell commands.

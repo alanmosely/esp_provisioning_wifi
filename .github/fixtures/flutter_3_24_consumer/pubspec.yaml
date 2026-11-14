@@ -1,0 +1,15 @@
+name: provisioning_minimum_sdk_consumer
+publish_to: none
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  esp_provisioning_wifi:
+    path: ../../..
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
