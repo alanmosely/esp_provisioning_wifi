@@ -10,6 +10,9 @@ env:
   # re-running the full local validation from AGENTS.md.
   FLUTTER_VERSION: "3.38.7"
 
+permissions:
+  contents: read
+
 jobs:
   analyze-test:
     runs-on: ubuntu-latest
@@ -66,6 +69,12 @@ jobs:
       # gradle wrapper only exists after the Flutter build above generates it.
       - run: ./gradlew :esp_provisioning_wifi:testDebugUnitTest :esp_provisioning_wifi:lintDebug
         working-directory: example/android
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: provisioning-example-android
+          path: example/build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+          compression-level: 0
 
   # The only place the Swift plugin is compiled; non-Mac dev machines cannot.
   build-ios-example:
@@ -80,3 +89,13 @@ jobs:
       - run: swift test --package-path ios
       - run: flutter build ios --debug --no-codesign
         working-directory: example
+      - name: Bundle unsigned iOS example
+        run: |
+          mkdir -p .release
+          ditto -c -k --keepParent example/build/ios/iphoneos/Runner.app .release/provisioning-example-ios-unsigned.zip
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: provisioning-example-ios-unsigned
+          path: .release/provisioning-example-ios-unsigned.zip
+          if-no-files-found: error
+          compression-level: 0
