@@ -27,6 +27,8 @@ private enum MethodNames {
     static let provisionWifi = "provisionWifi"
     static let fetchCustomData = "fetchCustomData"
     static let cancelOperations = "cancelOperations"
+    static let ensureBluetoothReady = "ensureBluetoothReady"
+    static let cancelBluetoothReadiness = "cancelBluetoothReadiness"
 }
 
 private enum ArgumentKeys {
@@ -125,6 +127,12 @@ private final class ProvisionOperationCoordinator {
 
 public class SwiftEspProvisioningWifiPlugin: NSObject, FlutterPlugin {
     private let coordinator = ProvisionOperationCoordinator()
+    private let bluetooth = BluetoothReadiness()
+
+    public func detachFromEngine(for registrar: FlutterPluginRegistrar) {
+        bluetooth.cancel()
+        _ = coordinator.cancelOperations()
+    }
 
     public static func register(with registrar: FlutterPluginRegistrar) {
         let channel = FlutterMethodChannel(name: MethodNames.channel, binaryMessenger: registrar.messenger())
@@ -134,14 +142,31 @@ public class SwiftEspProvisioningWifiPlugin: NSObject, FlutterPlugin {
     
 
     public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
-        if call.method == MethodNames.getPlatformVersion {
+        switch BluetoothChannelRequest.parse(call.method, call.arguments) {
+        case .cancelReadiness(let id):
+            bluetooth.cancel(id: id)
+            result(nil)
+            return
+        case .ensureReady(let id, let timeoutMs):
+            _ = coordinator.cancelOperations()
+            bluetooth.ensureReady(id: id, timeoutMs: timeoutMs, result: result)
+            return
+        case .platformVersion:
             result("iOS " + UIDevice.current.systemVersion)
             return
-        }
-
-        if call.method == MethodNames.cancelOperations {
+        case .cancelOperations:
+            bluetooth.cancel()
             result(coordinator.cancelOperations())
             return
+        case .invalid:
+            result(FlutterError(code: ErrorCodes.missingArgument,
+                message: "Invalid method arguments", details: nil))
+            return
+        case .unsupported:
+            result(FlutterMethodNotImplemented)
+            return
+        case .provisioning:
+            bluetooth.cancel()
         }
 
         guard let arguments = call.arguments as? [String: Any] else {

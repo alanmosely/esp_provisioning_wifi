@@ -21,12 +21,30 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      - run: dart format --output=none --set-exit-if-changed lib test
+      - run: dart format --output=none --set-exit-if-changed lib test example/lib example/test example/integration_test
       - run: flutter analyze
       - run: flutter test
       - run: flutter test
         working-directory: example
       - run: flutter pub publish --dry-run
+
+  minimum-flutter-consumer:
+    name: Flutter 3.24 consumer
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .github/fixtures/flutter_3_24_consumer
+    steps:
+      - uses: actions/checkout@v5
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.24.0"
+          channel: stable
+          cache: true
+      # Resolve the plugin as a dependency so only the consumer needs to
+      # support Flutter 3.24, independently of the plugin's contributor tools.
+      - run: flutter pub get
+      - run: flutter test --no-pub
 
   build-android-example:
     runs-on: ubuntu-latest
@@ -46,7 +64,7 @@ jobs:
       # Native unit tests for the plugin's Kotlin invariants (resolver
       # exactly-once/main-thread, Boss token/cancel/credit semantics). The
       # gradle wrapper only exists after the Flutter build above generates it.
-      - run: ./gradlew :esp_provisioning_wifi:testDebugUnitTest
+      - run: ./gradlew :esp_provisioning_wifi:testDebugUnitTest :esp_provisioning_wifi:lintDebug
         working-directory: example/android
 
   # The only place the Swift plugin is compiled; non-Mac dev machines cannot.
@@ -59,5 +77,6 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
+      - run: swift test --package-path ios
       - run: flutter build ios --debug --no-codesign
         working-directory: example

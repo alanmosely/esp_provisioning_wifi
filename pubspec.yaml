@@ -1,7 +1,7 @@
 name: esp_provisioning_wifi
 description: Provision WiFi on Espressif ESP32 devices over Bluetooth LE from Flutter,
   with a Bloc API and native Android and iOS provisioning implementations.
-version: 0.3.1
+version: 0.4.0
 repository: https://github.com/alanmosely/esp_provisioning_wifi
 issue_tracker: https://github.com/alanmosely/esp_provisioning_wifi/issues
 
@@ -14,7 +14,7 @@ dependencies:
     sdk: flutter
   flutter_bloc: ^9.1.1
   bloc_concurrency: ^0.3.0
-  equatable: ^2.1.0
+  equatable: ">=2.1.0 <4.0.0"
   plugin_platform_interface: ^2.1.8
   # permission_handler 13 requires permission_handler_android 14, which needs
   # AGP 9 / Kotlin 2.3 / compileSdk 37 - beyond current stable Flutter

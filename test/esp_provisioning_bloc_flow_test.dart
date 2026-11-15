@@ -869,6 +869,66 @@ void main() {
     );
   });
 
+  test('ignores a permission grant after close', () async {
+    final permissionRequested = Completer<void>();
+    final permission = Completer<bool>();
+    final service = FakeProvisioningService();
+    final bloc = EspProvisioningBloc(
+      provisioningService: service,
+      bluetoothPermissionRequest: () {
+        permissionRequested.complete();
+        return permission.future;
+      },
+    );
+
+    bloc.add(const EspProvisioningEventStart('PROV_'));
+    await permissionRequested.future;
+    await bloc.close();
+    permission.complete(true);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(service.cancelOperationsCalls, 1);
+    expect(service.scanBleDevicesCalls, 0);
+    expect(bloc.state.status, EspProvisioningStatus.initial);
+  });
+
+  test('ignores a permission grant after a newer Wi-Fi scan starts', () async {
+    final permissionRequested = Completer<void>();
+    final permission = Completer<bool>();
+    final wifiScanStarted = Completer<void>();
+    final wifiScan = Completer<List<EspWifiNetwork>>();
+    const networks = <EspWifiNetwork>[EspWifiNetwork(ssid: 'home-wifi')];
+    final service = FakeProvisioningService(
+      scanWifiNetworksHandler: (_, __) {
+        wifiScanStarted.complete();
+        return wifiScan.future;
+      },
+    );
+    final bloc = EspProvisioningBloc(
+      provisioningService: service,
+      bluetoothPermissionRequest: () {
+        permissionRequested.complete();
+        return permission.future;
+      },
+    );
+    addTearDown(bloc.close);
+
+    bloc.add(const EspProvisioningEventStart('PROV_'));
+    await permissionRequested.future;
+    bloc.add(const EspProvisioningEventBleSelected('PROV_1', 'pop'));
+    await wifiScanStarted.future;
+
+    permission.complete(true);
+    await Future<void>.delayed(Duration.zero);
+    wifiScan.complete(networks);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(service.cancelOperationsCalls, 1);
+    expect(service.scanBleDevicesCalls, 0);
+    expect(bloc.state.status, EspProvisioningStatus.wifiScanned);
+    expect(bloc.state.wifiNetworks, networks);
+  });
+
   test('close cancels in-flight native operations', () async {
     final service = FakeProvisioningService(
       scanBleDevicesHandler: (_) => Completer<List<String>>().future,

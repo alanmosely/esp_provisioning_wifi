@@ -95,6 +95,11 @@ class EspProvisioningBloc
       } else {
         bluetoothIsGranted = await requestBluetoothPermission();
       }
+      // A late permission result must not supersede a newer operation or
+      // restart native work after close.
+      if (epoch != _operationEpoch || emit.isDone) {
+        return;
+      }
       if (bluetoothIsGranted) {
         epoch = ++_operationEpoch;
         await espProvisioningService.cancelOperations();
@@ -129,7 +134,7 @@ class EspProvisioningBloc
           timeoutOperation: 'scanBleDevices',
           timeoutMessage: 'BLE scan timed out',
         );
-      } else if (epoch == _operationEpoch) {
+      } else {
         emit(state.copyWith(
           status: EspProvisioningStatus.error,
           errorCode: EspProvisioningErrorCodes.permission,
@@ -139,7 +144,7 @@ class EspProvisioningBloc
         ));
       }
     } on Object catch (e) {
-      if (epoch == _operationEpoch) {
+      if (epoch == _operationEpoch && !emit.isDone) {
         _emitUnexpectedError(emit, e);
       }
     }

@@ -1,3 +1,14 @@
+## 0.4.0
+
+* Alpha: Ignore late Bluetooth permission results after the provisioning BLoC closes or a newer operation starts.
+* Alpha: Allow Equatable 3 alongside Equatable 2.
+* Alpha: Reject malformed cancellation/provisioning requests before superseding active work on both platforms; unknown methods preserve pending readiness. Preserve full-width request IDs.
+* Alpha: Add Android dispatch/permission regressions across API 23/30/31/33, Swift lifecycle/parser tests, CI Android lint, and example readiness/cancel/retry coverage.
+
+* Alpha: Add EspBluetooth.ensureReady and EspBluetoothState using native Android BluetoothAdapter and iOS Core Bluetooth; no additional Bluetooth dependency.
+* Alpha: Bound permission/enable waits, cancel on teardown or supersession, and isolate late readiness callbacks from successor requests.
+* Alpha: Existing provisioning APIs and platform minimums are unchanged. Readiness participates in the single-operation model and supersedes an active provisioning operation; cancel() cancels readiness only.
+
 ## 0.3.1
 
 * Alpha: Deliver iOS method channel results exactly once on the main thread (ESPProvision invokes its completion handlers on background queues; replies previously raced unsynchronized guards and could be invoked off the platform thread or twice)

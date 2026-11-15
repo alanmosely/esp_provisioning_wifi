@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:esp_provisioning_wifi/esp_provisioning_wifi.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -31,6 +33,64 @@ class _MyAppViewState extends State<MyAppView> {
   final double defaultPadding = 12.0;
 
   String feedbackMessage = '';
+  bool _checkingBluetooth = false;
+  bool _cancellingBluetooth = false;
+  int _readinessGeneration = 0;
+
+  Future<void> _startScan() async {
+    if (_checkingBluetooth) return;
+    final generation = ++_readinessGeneration;
+    setState(() => _checkingBluetooth = true);
+    pushFeedback('Checking Bluetooth...');
+    try {
+      final state = await EspBluetooth.ensureReady();
+      if (!mounted || generation != _readinessGeneration) return;
+      if (state == EspBluetoothState.on) {
+        context.read<EspProvisioningBloc>().add(
+              EspProvisioningEventStart(prefixController.text),
+            );
+        pushFeedback('Scanning BLE devices...');
+      } else {
+        pushFeedback(switch (state) {
+          EspBluetoothState.off => 'Turn on Bluetooth in Settings, then retry.',
+          EspBluetoothState.unauthorized =>
+            'Allow Bluetooth access in Settings, then retry.',
+          EspBluetoothState.unavailable =>
+            'Bluetooth is unavailable on this device.',
+          _ => 'Bluetooth is not ready. Please retry.',
+        });
+      }
+    } catch (_) {
+      if (mounted && generation == _readinessGeneration) {
+        pushFeedback('Bluetooth check did not complete. Please retry.');
+      }
+    } finally {
+      if (mounted && generation == _readinessGeneration) {
+        setState(() => _checkingBluetooth = false);
+      }
+    }
+  }
+
+  Future<void> _cancelReadiness() async {
+    if (_cancellingBluetooth) return;
+    setState(() => _cancellingBluetooth = true);
+    // Invalidate the result before awaiting native cancellation. Keep retry
+    // disabled until cancellation completes so it cannot cancel a successor.
+    ++_readinessGeneration;
+    try {
+      await EspBluetooth.cancel();
+    } catch (_) {
+      // Native timeout remains the fallback if the channel is unavailable.
+    } finally {
+      if (mounted) {
+        setState(() {
+          _checkingBluetooth = false;
+          _cancellingBluetooth = false;
+        });
+        pushFeedback('Bluetooth check cancelled.');
+      }
+    }
+  }
 
   final TextEditingController prefixController =
       TextEditingController(text: 'PROV_');
@@ -81,6 +141,8 @@ class _MyAppViewState extends State<MyAppView> {
 
   @override
   void dispose() {
+    ++_readinessGeneration;
+    if (_checkingBluetooth) unawaited(EspBluetooth.cancel().catchError((_) {}));
     prefixController.dispose();
     proofOfPossessionController.dispose();
     passphraseController.dispose();
@@ -102,13 +164,15 @@ class _MyAppViewState extends State<MyAppView> {
             actions: [
               IconButton(
                 icon: const Icon(Icons.bluetooth),
-                onPressed: () {
-                  context
-                      .read<EspProvisioningBloc>()
-                      .add(EspProvisioningEventStart(prefixController.text));
-                  pushFeedback('Scanning BLE devices...');
-                },
+                tooltip: 'Scan BLE devices',
+                onPressed: _checkingBluetooth ? null : _startScan,
               ),
+              if (_checkingBluetooth)
+                IconButton(
+                  icon: const Icon(Icons.cancel),
+                  tooltip: 'Cancel Bluetooth check',
+                  onPressed: _cancellingBluetooth ? null : _cancelReadiness,
+                ),
               IconButton(
                 icon: const Icon(Icons.clear_all),
                 onPressed: () {
