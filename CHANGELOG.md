@@ -1,4 +1,6 @@
-## 0.4.0
+## 0.4.0-rc.1
+
+* Alpha: Release candidate; native CI passes, while physical Android/iOS Bluetooth and legacy firmware qualification remain outstanding.
 
 * Alpha: Ignore late Bluetooth permission results after the provisioning BLoC closes or a newer operation starts.
 * Alpha: Allow Equatable 3 alongside Equatable 2.

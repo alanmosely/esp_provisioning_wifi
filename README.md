@@ -10,7 +10,27 @@ Library to provision WiFi on ESP32 devices over Bluetooth, using Bloc.
 
 ## API Notes
 
-### Bluetooth readiness (0.4.0)
+### Upgrade to 0.4.0-rc.1
+
+This is a release candidate. Pin `esp_provisioning_wifi: 0.4.0-rc.1` explicitly
+in your app, run `flutter pub get`, and rebuild the Android/iOS app (including
+`pod install` for an existing iOS workspace). Keep Flutter >=3.24, Dart >=3.5,
+Android API 23+ and iOS 13+. Equatable 2 and 3 are supported.
+
+Existing provisioning calls keep their API. Import readiness through the public
+barrel, retain native Bluetooth permission descriptions, and handle all readiness
+states and typed cancellation/timeout results. Close the provisioning BLoC when
+leaving setup so pending permission replies cannot restart the old flow. Starting
+readiness supersedes provisioning; complete readiness before beginning a scan.
+
+Before production use, qualify real permission grant/denial, Bluetooth off/on,
+backgrounding, setup exit/re-entry, Wi-Fi scan/join and retry on supported Android
+and iOS phones against your firmware. Hosted tests compile both platforms but
+do not establish physical BLE behavior. The attached debug Android example and
+unsigned iOS example are test builds; consumers should rebuild and sign their
+own applications. See the [release notes](doc/releases/0.4.0-rc.1.md).
+
+### Bluetooth readiness (0.4.0 candidate)
 
 `EspBluetooth.ensureReady()` uses Android BluetoothAdapter and iOS Core Bluetooth,
 without an additional Bluetooth plugin. Import it through the public barrel.
